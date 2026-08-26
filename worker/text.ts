@@ -78,6 +78,8 @@ export function maskContacts(value: string): string {
     .replace(/(?:\+?1[ .-]?)?(?:\(\d{3}\)[ .-]?|\d{3}[ .-])\d{3}[ .-]\d{4}\b/g, "[phone redacted]")
     .replace(/\b(?:1\d{10}|\d{10})\b/g, "[phone redacted]")
     .replace(/\bDSN\s*\d{3}[ .-]\d{4}\b/gi, "[phone redacted]")
+    .replace(/\b(?:phone|telephone|call|contact|dsn)\s*[:.]?\s*\d{7}\b/gi, "[phone redacted]")
+    .replace(/(?<![\d,])\d{3}[- ]\d{4}\b(?!,\d)/g, "[phone redacted]")
     .replace(/\b(?:ext(?:ension)?|x)\s*[:.]?\s*\d{2,6}\b/gi, "[extension redacted]")
     .replace(/\b\d{1,6}\s+(?:(?:[A-Z][A-Za-z0-9.'-]*|[A-Z0-9]{2,})\s+){1,4}(?:St(?:reet)?|Rd|Road|Ave(?:nue)?|Blvd|Boulevard|Dr|Drive|Ln|Lane|Ct|Court|Hwy|Highway)\.?\b/g, "[address redacted]");
 }

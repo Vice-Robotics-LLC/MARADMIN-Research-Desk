@@ -13,6 +13,38 @@ const CATALOG_ORIGIN = "https://maradmin-api.vicerobotics.com";
 const CATALOG_PATH = "/v1/catalog/bootstrap";
 const MAX_CATALOG_PAGE_BYTES = 2_000_000;
 
+export const DOCUMENT_UPSERT_SQL = `INSERT INTO documents (
+  id, number, sequence, number_year, publication_year, publication_month, title,
+  official_url, article_id, published_at, source_status, catalog_revision,
+  first_seen_at, last_verified_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+  body_status=CASE
+    WHEN documents.number <> excluded.number
+      OR documents.official_url <> excluded.official_url
+      OR documents.article_id <> excluded.article_id
+    THEN 'stale' ELSE documents.body_status END,
+  current_source_hash=CASE
+    WHEN documents.number <> excluded.number
+      OR documents.official_url <> excluded.official_url
+      OR documents.article_id <> excluded.article_id
+    THEN NULL ELSE documents.current_source_hash END,
+  body_retrieved_at=CASE
+    WHEN documents.number <> excluded.number
+      OR documents.official_url <> excluded.official_url
+      OR documents.article_id <> excluded.article_id
+    THEN NULL ELSE documents.body_retrieved_at END,
+  parser_version=CASE
+    WHEN documents.number <> excluded.number
+      OR documents.official_url <> excluded.official_url
+      OR documents.article_id <> excluded.article_id
+    THEN NULL ELSE documents.parser_version END,
+  number=excluded.number, sequence=excluded.sequence, number_year=excluded.number_year,
+  publication_year=excluded.publication_year, publication_month=excluded.publication_month,
+  title=excluded.title, official_url=excluded.official_url, article_id=excluded.article_id,
+  published_at=excluded.published_at, source_status=excluded.source_status,
+  catalog_revision=excluded.catalog_revision, last_verified_at=excluded.last_verified_at`;
+
 export function validateCatalogURL(value: string): URL {
   const url = new URL(value);
   if (url.origin !== CATALOG_ORIGIN || url.pathname !== CATALOG_PATH || url.username || url.password || url.port) {
@@ -100,25 +132,17 @@ export async function syncCatalog(db: D1Database, sourceURL: string, fetcher: ty
       revision = Math.max(revision, page.catalogRevision);
       for (let offset = 0; offset < page.items.length; offset += 40) {
         const statements = page.items.slice(offset, offset + 40).flatMap((item) => [
-          db.prepare(`INSERT INTO documents (
-            id, number, sequence, number_year, publication_year, publication_month, title,
-            official_url, article_id, published_at, source_status, catalog_revision,
-            first_seen_at, last_verified_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            number=excluded.number, sequence=excluded.sequence, number_year=excluded.number_year,
-            publication_year=excluded.publication_year, publication_month=excluded.publication_month,
-            title=excluded.title, official_url=excluded.official_url, article_id=excluded.article_id,
-            published_at=excluded.published_at, source_status=excluded.source_status,
-            catalog_revision=excluded.catalog_revision, last_verified_at=excluded.last_verified_at`)
+          db.prepare(DOCUMENT_UPSERT_SQL)
             .bind(item.catalogID, item.number, item.sequence, item.numberYear, item.publicationYear,
               item.publicationMonth, item.title, item.officialURL, item.articleID, item.publishedAt,
               item.sourceStatus, page.catalogRevision, item.firstSeenAt, item.lastVerifiedAt),
           db.prepare(`INSERT INTO document_fts(document_id, number, title, body)
             SELECT ?, ?, ?, '' WHERE NOT EXISTS (SELECT 1 FROM document_fts WHERE document_id = ?)`)
             .bind(item.catalogID, item.number, item.title, item.catalogID),
-          db.prepare("UPDATE document_fts SET number = ?, title = ? WHERE document_id = ?")
-            .bind(item.number, item.title, item.catalogID)
+          db.prepare(`UPDATE document_fts SET number = ?, title = ?,
+            body = CASE WHEN (SELECT body_status FROM documents WHERE id = ?) = 'stale' THEN '' ELSE body END
+            WHERE document_id = ?`)
+            .bind(item.number, item.title, item.catalogID, item.catalogID)
         ]);
         await db.batch(statements);
       }

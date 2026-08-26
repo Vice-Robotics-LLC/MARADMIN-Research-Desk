@@ -12,7 +12,7 @@ As verified on August 26, 2026, the [Devpost official rules](https://webmcp.devp
 - Human experience: anonymous responsive search with explicit corpus coverage, bounded evidence, revision links, and authoritative Marines.mil routing.
 - Agent experience: five read-only WebMCP tools registered on the same page and backed by the same provenance-aware APIs.
 - Corpus verified August 26, 2026: 16,009 official catalog records, with full-text coverage explicitly labeled per result. The challenge proof indexes MARADMIN 023/26; complete historical body backfill is not claimed.
-- Live API candidate verified August 26, 2026: `2026-08-26.10`, with strict all-term search ordering, explicit people-lookup rejection, delivered CSP/HSTS headers, and private R2 provenance.
+- Release API candidate: `2026-08-26.11`, with strict all-term search ordering, explicit people-lookup rejection, complete selected-document eligibility coverage, stale-body invalidation when catalog identity changes, delivered CSP/HSTS headers, and private R2 provenance.
 
 ## Two-minute demo script
 

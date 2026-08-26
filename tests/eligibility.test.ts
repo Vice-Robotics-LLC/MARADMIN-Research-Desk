@@ -81,6 +81,27 @@ describe("conservative MARADMIN eligibility", () => {
     expect(result.evidence).toHaveLength(5);
   });
 
+  it("scans every selected document even when the combined evidence exceeds 500 sections", () => {
+    const rows = Array.from({ length: 600 }, (_, index) => section(
+      index === 599
+        ? "Marines in the active component with MOS 3043 and rank E-5 are not eligible for this exception."
+        : "Marines in the active component with MOS 3043 and rank E-5 are eligible under this paragraph.",
+      `doc-${Math.floor(index / 200) + 1}`
+    ));
+
+    const result = assessSections(rows, context, ["doc-1", "doc-2", "doc-3"]);
+    expect(result.status).toBe("not_supported");
+  });
+
+  it("does not return supported when a selected document has no indexed evidence", () => {
+    const result = assessSections([
+      section("Marines in the active component with MOS 3043 and rank E-5 are eligible.", "doc-indexed")
+    ], context, ["doc-indexed", "doc-metadata-only"]);
+
+    expect(result.status).toBe("unknown");
+    expect(result.rationale).toContain("does not have indexed evidence");
+  });
+
   it("returns unknown when matching text does not establish eligibility", () => {
     const result = assessSections([
       section("This administrative message references the active component, MOS 3043, and rank E-5 for background only.")

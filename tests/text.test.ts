@@ -68,7 +68,7 @@ describe("MARADMIN text extraction", () => {
   });
 
   it("masks emails and phone numbers in evidence text", () => {
-    const masked = maskContacts("Questions: smb.cmt@example.mil, 703-784-0557, 703 555 1234, 7035551234, 17035551234, (703) 784-0558, +1 703 784 0559 ext. 1234, DSN 278-0557, DSN 312 555 1234, 123 Main Street, 456 Harbor Rd. Keep 9917035551234 unchanged.");
+    const masked = maskContacts("Questions: smb.cmt@example.mil, 703-784-0557, 703 555 1234, 7035551234, 17035551234, (703) 784-0558, +1 703 784 0559 ext. 1234, DSN 278-0557, DSN 312 555 1234, call 2780558, 279-0559, 123 Main Street, 456 Harbor Rd. Keep 9917035551234 unchanged.");
     const contactPortion = masked.split(" Keep ")[0]!;
     expect(masked).toContain("[email redacted]");
     expect(masked).toContain("[phone redacted]");
@@ -81,6 +81,8 @@ describe("MARADMIN text extraction", () => {
     expect(contactPortion).not.toContain("17035551234");
     expect(contactPortion).not.toContain("(703) 784-0558");
     expect(contactPortion).not.toContain("DSN 312 555 1234");
+    expect(contactPortion).not.toContain("2780558");
+    expect(contactPortion).not.toContain("279-0559");
     expect(contactPortion).not.toContain("456 Harbor Rd.");
     expect(masked).toContain("9917035551234");
   });

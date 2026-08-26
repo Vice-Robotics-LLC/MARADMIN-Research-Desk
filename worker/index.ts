@@ -24,7 +24,7 @@ type SectionRow = {
   current_source_hash: string; body_retrieved_at: string; marker: string | null; text: string;
 };
 
-const API_VERSION = "2026-08-26.10";
+const API_VERSION = "2026-08-26.11";
 const API_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
@@ -261,9 +261,11 @@ async function handleAPI(request: Request, env: Env, requestID: string): Promise
       d.current_source_hash, d.body_retrieved_at, s.marker, s.text
       FROM document_sections s JOIN documents d ON d.id=s.document_id
       WHERE d.id IN (${placeholders}) AND d.body_status='indexed' AND s.source_hash=d.current_source_hash
-      ORDER BY d.published_at DESC, s.ordinal LIMIT 500`)
+      ORDER BY d.published_at DESC, d.id, s.ordinal`)
       .bind(...documentIDs).all<SectionRow>();
-    return json(requestID, assessSections(rows.results, context));
+    // Ingestion caps every body at 200 sections and the request caps selection at five
+    // documents, so this preserves coverage for every selected indexed source at <= 1,000 rows.
+    return json(requestID, assessSections(rows.results, context, documentIDs));
   }
   if (request.method === "POST" && url.pathname === "/api/admin/sync-catalog") {
     if (!(await authorizedAdmin(request, env.CATALOG_ADMIN_TOKEN))) return error(requestID, "not_found", 404);

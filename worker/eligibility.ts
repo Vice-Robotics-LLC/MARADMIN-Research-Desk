@@ -33,7 +33,7 @@ function matchesContext(key: string, raw: unknown, lower: string): boolean {
   return false;
 }
 
-export function assessSections(rows: SectionRow[], context: EligibilityContext): EligibilityResult {
+export function assessSections(rows: SectionRow[], context: EligibilityContext, expectedDocumentIDs: string[] = []): EligibilityResult {
   const supplied = Object.entries(context).filter(([, value]) => value !== undefined);
   const missingContext = supplied.length ? [] : ["rank, MOS, component, zone, or years of service"];
   const evidence: Evidence[] = [];
@@ -53,12 +53,20 @@ export function assessSections(rows: SectionRow[], context: EligibilityContext):
       excerpt: maskContacts(row.text).slice(0, 900)
     });
   }
-  const status = explicitNegative ? "not_supported" : explicitPositive && !explicitNegative ? "supported" : "unknown";
+  const coveredDocumentIDs = new Set(rows.map((row) => row.id));
+  const hasIncompleteCoverage = expectedDocumentIDs.some((id) => !coveredDocumentIDs.has(id));
+  const status = explicitNegative
+    ? "not_supported"
+    : explicitPositive && !hasIncompleteCoverage
+      ? "supported"
+      : "unknown";
   const rationale = status === "not_supported"
     ? "The indexed source contains an explicit exclusion matching the supplied context."
     : status === "supported"
       ? "The indexed source contains explicit eligibility language matching every supplied field."
-      : "The available indexed evidence does not establish a definitive match. Review the cited official source and applicable revisions.";
+      : hasIncompleteCoverage
+        ? "At least one selected message does not have indexed evidence available, so the available sources cannot establish a definitive match."
+        : "The available indexed evidence does not establish a definitive match. Review the cited official source and applicable revisions.";
   return {
     status, rationale, missingContext, evidence,
     disclaimer: "Research aid only. This is not an official eligibility, assignment, promotion, or payment determination."
