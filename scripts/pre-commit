@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+duplicates=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/).+ [23]\.[^/]+$' || true)
+if [ -n "$duplicates" ]; then
+  echo "Finder duplicate files are not allowed:" >&2
+  echo "$duplicates" >&2
+  exit 1
+fi
+
+if git diff --cached --no-ext-diff --unified=0 | grep -Ei "^[+].*(api[_-]?key|secret|token)[[:space:]]*[:=][[:space:]]*['\"][A-Za-z0-9_-]{16,}" >/dev/null; then
+  echo "Possible secret detected in staged changes." >&2
+  exit 1
+fi

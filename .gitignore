@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.project-local/
+.wrangler/
+coverage/
+.env
+.env.*
+*.log
+* 2.*
+* 3.*
+.DS_Store
