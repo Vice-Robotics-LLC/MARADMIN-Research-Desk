@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   extractMARADMINBody,
+  extractMARADMINRelationScope,
   extractRelations,
   htmlToPlainText,
   maskContacts,
@@ -74,6 +75,7 @@ describe("MARADMIN text extraction", () => {
     expect(masked).toContain("[phone redacted]");
     expect(masked).toContain("[extension redacted]");
     expect(masked).toContain("[address redacted]");
+    expect(masked).toBe("Questions: [email redacted], [phone redacted], [phone redacted], [phone redacted], [phone redacted], [phone redacted], [phone redacted] [extension redacted], [phone redacted], DSN [phone redacted], [phone redacted], [phone redacted], [address redacted], [address redacted]. Keep 9917035551234 unchanged.");
     expect(contactPortion).not.toContain("smb.cmt@example.mil");
     expect(contactPortion).not.toContain("703-784-0557");
     expect(contactPortion).not.toContain("703 555 1234");
@@ -115,6 +117,20 @@ describe("MARADMIN text extraction", () => {
 
     expect(extracted).toContain("https://www.marines.mil/example");
     expect(extracted).toContain("This paragraph must remain indexed after the URL.");
+  });
+
+  it("stops at an in-page terminator and excludes page chrome from relations", () => {
+    const html = `<nav>Related MARADMIN 999/26</nav>
+      <article><p>MARADMIN 123/26</p><p>REF/A/DOC/MARADMIN 100/26//</p>
+      <p>GENTEXT/REMARKS/1. This sufficiently long official message body is retained.<br>
+      2. Release authorized by the appropriate authority.//</p></article>
+      <footer>More MARADMIN 888/26 links and contact 278-0557.</footer>`;
+
+    const extracted = extractMARADMINBody(html, "123/26");
+    expect(extracted).toContain("Release authorized");
+    expect(extracted).not.toContain("More MARADMIN");
+    expect(extractRelations(extractMARADMINRelationScope(html, "123/26"), "123/26"))
+      .toEqual([{ targetNumber: "100/26", relationType: "references", evidence: "REF/A/DOC/MARADMIN 100/26//" }]);
   });
 
   it("accepts a MARADMIN that cites an ALMAR before its remarks body", () => {

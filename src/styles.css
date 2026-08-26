@@ -17,6 +17,7 @@ body { margin: 0; min-width: 320px; min-height: 100vh; background: radial-gradie
 button, input, select { font: inherit; }
 button, a, input, select { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.search-column button:focus-visible, .search-column a:focus-visible, .search-column input:focus-visible, .search-column select:focus-visible { outline-color: var(--scarlet); }
 main { min-height: 100vh; }
 .topbar { min-height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 4vw; border-bottom: 1px solid var(--line); background: rgba(7,24,43,.82); backdrop-filter: blur(18px); position: sticky; top: 0; z-index: 10; }
 .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: -.02em; }
@@ -73,6 +74,7 @@ blockquote span { display: block; margin-bottom: 8px; color: var(--gold); font-f
 .context-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .context-grid label { color: #c9d3e0; font-size: 12px; }
 .context-grid input, .context-grid select { margin-top: 6px; min-height: 44px; }
+.field-error { display: block; margin-top: 5px; color: #ff9daf; font-size: 11px; line-height: 1.35; }
 .assess { width: 100%; margin-top: 14px; padding: 14px; border: 0; border-radius: 3px; color: white; background: var(--scarlet); font-weight: 800; cursor: pointer; }
 .assessment { margin-top: 20px; padding: 18px; border: 1px solid rgba(255,255,255,.18); }
 .assessment-supported { border-color: #43c89a; }

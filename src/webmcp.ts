@@ -26,7 +26,7 @@ export type WebMcpTool = {
 };
 
 type ModelContext = { registerTool(tool: WebMcpTool): Promise<unknown> | unknown };
-type WebMcpDocument = Document & { modelContext?: ModelContext };
+type WebMcpSurface = { modelContext?: ModelContext };
 
 const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const SOURCE_EVIDENCE = { ...READ_ONLY, untrustedContentHint: true } as const;
@@ -158,9 +158,25 @@ export function getWebMcpToolDefinitions(): WebMcpTool[] {
   ];
 }
 
-export async function registerWebMcpTools(pageDocument: WebMcpDocument = document as WebMcpDocument): Promise<ToolName[]> {
-  if (typeof pageDocument.modelContext?.registerTool !== "function") return [];
+export async function registerWebMcpTools(
+  pageDocument: WebMcpSurface = typeof document === "undefined" ? {} : document as Document & WebMcpSurface,
+  pageNavigator: WebMcpSurface = typeof navigator === "undefined" ? {} : navigator as Navigator & WebMcpSurface
+): Promise<ToolName[]> {
+  const modelContext = typeof pageDocument.modelContext?.registerTool === "function"
+    ? pageDocument.modelContext
+    : typeof pageNavigator.modelContext?.registerTool === "function"
+      ? pageNavigator.modelContext
+      : null;
+  if (!modelContext) return [];
   const tools = getWebMcpToolDefinitions();
-  for (const tool of tools) await pageDocument.modelContext.registerTool(tool);
-  return tools.map((tool) => tool.name);
+  const registered: ToolName[] = [];
+  for (const tool of tools) {
+    try {
+      await modelContext.registerTool(tool);
+      registered.push(tool.name);
+    } catch (error) {
+      console.warn(`WebMCP registration failed for ${tool.name}.`, error);
+    }
+  }
+  return registered;
 }

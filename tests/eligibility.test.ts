@@ -59,6 +59,16 @@ describe("conservative MARADMIN eligibility", () => {
     expect(result.evidence[0]?.excerpt).toContain("not eligible");
   });
 
+  it.each(["no longer eligible", "not yet eligible", "not otherwise eligible"])(
+    "never treats bounded negation as positive eligibility: %s",
+    (negation) => {
+      const result = assessSections([
+        section(`Marines in the active component with MOS 3043 and rank E-5 are ${negation} for this benefit.`)
+      ], context);
+      expect(result.status).toBe("not_supported");
+    }
+  );
+
   it("does not overstate an exclusion that matches only part of the supplied context", () => {
     const result = assessSections([
       section("Marines in the active component are not eligible, while other categories are addressed separately.")

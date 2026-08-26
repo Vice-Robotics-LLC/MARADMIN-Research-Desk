@@ -81,6 +81,10 @@ describe("bounded catalog search", () => {
     expect(isDisallowedPeopleQuery("promotion board schedule announcement, promotion and board")).toBe(false);
     expect(isDisallowedPeopleQuery("reenlistment bonus infantry riflemen")).toBe(false);
     expect(isDisallowedPeopleQuery("promotion board results okinawa")).toBe(false);
+    expect(isDisallowedPeopleQuery("permanent change of station address requirements")).toBe(false);
+    expect(isDisallowedPeopleQuery("MOS 0311 name change policy")).toBe(false);
+    expect(isDisallowedPeopleQuery("contact hours for training")).toBe(false);
+    expect(isDisallowedPeopleQuery("Officer John Smith contact information")).toBe(true);
   });
 
   it("clamps result limits to a positive ceiling", () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseSync } from "node:sqlite";
+import { readFileSync } from "node:fs";
 import { DOCUMENT_UPSERT_SQL, validateCatalogItem, validateCatalogURL } from "../worker/catalog";
 
 const validItem = {
@@ -30,15 +31,7 @@ describe("catalog trust boundary", () => {
 
   it("invalidates an indexed body when catalog source identity changes", () => {
     const database = new DatabaseSync(":memory:");
-    database.exec(`CREATE TABLE documents (
-      id TEXT PRIMARY KEY, number TEXT NOT NULL, sequence INTEGER NOT NULL, number_year INTEGER NOT NULL,
-      publication_year INTEGER NOT NULL, publication_month INTEGER NOT NULL, title TEXT NOT NULL,
-      official_url TEXT NOT NULL UNIQUE, article_id TEXT NOT NULL, published_at TEXT NOT NULL,
-      source_status TEXT NOT NULL, catalog_revision INTEGER NOT NULL,
-      body_status TEXT NOT NULL DEFAULT 'metadata_only',
-      current_source_hash TEXT, body_retrieved_at TEXT, parser_version TEXT,
-      first_seen_at TEXT NOT NULL, last_verified_at TEXT NOT NULL
-    )`);
+    database.exec(readFileSync(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8"));
     const statement = database.prepare(DOCUMENT_UPSERT_SQL);
     const values = (item: typeof validItem) => [
       item.catalogID, item.number, item.sequence, item.numberYear, item.publicationYear,
@@ -68,6 +61,57 @@ describe("catalog trust boundary", () => {
       current_source_hash: null,
       body_retrieved_at: null,
       parser_version: null
+    });
+    database.close();
+  });
+
+  it("isolates a reused official URL instead of aborting valid catalog writes", () => {
+    const database = new DatabaseSync(":memory:");
+    database.exec(readFileSync(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8"));
+    const statement = database.prepare(DOCUMENT_UPSERT_SQL);
+    const values = (item: typeof validItem) => [
+      item.catalogID, item.number, item.sequence, item.numberYear, item.publicationYear,
+      item.publicationMonth, item.title, item.officialURL, item.articleID, item.publishedAt,
+      item.sourceStatus, item.revision, item.firstSeenAt, item.lastVerifiedAt
+    ] as const;
+    statement.run(...values(validItem));
+    expect(() => statement.run(...values({ ...validItem, catalogID: "different-id", number: "024/26" }))).not.toThrow();
+    const followup = {
+      ...validItem,
+      catalogID: "valid-followup",
+      number: "025/26",
+      officialURL: "https://www.marines.mil/News/Messages/Messages-Display/Article/4385748/followup/",
+      articleID: "4385748"
+    };
+    statement.run(...values(followup));
+    expect(() => statement.run(...values({ ...validItem, officialURL: followup.officialURL, articleID: followup.articleID }))).not.toThrow();
+
+    expect(database.prepare("SELECT id FROM documents ORDER BY id").all()).toHaveLength(2);
+    expect(database.prepare("SELECT id FROM documents WHERE official_url=?").get(validItem.officialURL))
+      .toMatchObject({ id: validItem.catalogID });
+    expect(database.prepare("SELECT id FROM documents WHERE official_url=?").get(followup.officialURL))
+      .toMatchObject({ id: followup.catalogID });
+    database.close();
+  });
+
+  it("backfills a unique indexed row lookup for the existing FTS corpus", () => {
+    const database = new DatabaseSync(":memory:");
+    database.exec(readFileSync(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8"));
+    const statement = database.prepare(DOCUMENT_UPSERT_SQL);
+    statement.run(
+      validItem.catalogID, validItem.number, validItem.sequence, validItem.numberYear,
+      validItem.publicationYear, validItem.publicationMonth, validItem.title, validItem.officialURL,
+      validItem.articleID, validItem.publishedAt, validItem.sourceStatus, validItem.revision,
+      validItem.firstSeenAt, validItem.lastVerifiedAt
+    );
+    database.prepare("INSERT INTO document_fts(document_id, number, title, body) VALUES (?, ?, ?, '')")
+      .run(validItem.catalogID, validItem.number, validItem.title);
+    database.exec(readFileSync(new URL("../migrations/0007_fts_row_mapping.sql", import.meta.url), "utf8"));
+
+    expect(database.prepare(`SELECT m.document_id, m.fts_rowid, f.document_id AS indexed_document_id
+      FROM document_fts_rows m JOIN document_fts f ON f.rowid=m.fts_rowid`).get()).toMatchObject({
+      document_id: validItem.catalogID,
+      indexed_document_id: validItem.catalogID
     });
     database.close();
   });

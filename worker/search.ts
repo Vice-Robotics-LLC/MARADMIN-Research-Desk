@@ -16,9 +16,9 @@ export function isDisallowedPeopleQuery(query: string): boolean {
   if (/\d{7,12}/.test(query)) return true;
   if (/(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]\d{3}[ .-]\d{4}\b/.test(query)) return true;
   if (/\b\d{3}[ .-]\d{4}\b/.test(query)) return true;
-  const explicitLookup = /\b(?:find|lookup|locate|search|show|list|identify|who\s+is|where\s+is)\b[\s\S]{0,80}\b(?:marine|officer|person|individual|name|email|phone|contact|address|edipi|dodid)\b/i;
-  const contactIntent = /(?:\be[- ]?mail\b|\b(?:name|phone|telephone|mobile|cell|contact|poc|dsn|fax|extension|ext|address|edipi|dodid)\b)/i;
-  if (explicitLookup.test(query) || contactIntent.test(query)) return true;
+  const explicitLookup = /\b(?:find|lookup|locate|search|show|list|identify|who\s+is|where\s+is)\b[\s\S]{0,80}\b(?:officer|person|individual|email|phone|edipi|dodid)\b/i;
+  const unambiguousContactIntent = /(?:\be[- ]?mail\b|\b(?:phone|telephone|mobile|cell|poc|dsn|fax|extension|ext|edipi|dodid)\b)/i;
+  if (explicitLookup.test(query) || unambiguousContactIntent.test(query)) return true;
 
   const researchTerms = new Set([
     "active", "aircraft", "almar", "amount", "assignment", "authority", "aviation", "board", "bonus",
@@ -32,8 +32,9 @@ export function isDisallowedPeopleQuery(query: string): boolean {
   const tokens = query.normalize("NFKC").toLowerCase().match(/[a-z][a-z'’-]{1,30}/g) ?? [];
   const unknown = tokens.filter((token) => !researchTerms.has(token));
   if (/\b(?:find|lookup|locate|search|show|list|identify|who\s+is|where\s+is)\b/i.test(query) && unknown.length >= 2) return true;
-  const personSubject = /\b(?:marine|officer|sergeant|corporal|private|colonel|captain|major|general|person|individual)\b/i.test(query);
+  const personSubject = /\b(?:officer|sergeant|corporal|private|colonel|captain|major|general|person|individual)\b/i.test(query);
   const nameLike = /\b[A-Z][a-z'’-]{1,30}\s+[A-Z][a-z'’-]{1,30}\b/.test(query);
+  if (/\b(?:name|address|contact)\b/i.test(query) && (personSubject || nameLike)) return true;
   return personSubject && nameLike && unknown.length >= 2;
 }
 

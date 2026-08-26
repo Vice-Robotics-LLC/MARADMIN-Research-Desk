@@ -24,7 +24,7 @@ type SectionRow = {
   current_source_hash: string; body_retrieved_at: string; marker: string | null; text: string;
 };
 
-const API_VERSION = "2026-08-26.11";
+const API_VERSION = "2026-08-26.12";
 const API_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
@@ -122,9 +122,11 @@ async function searchDocuments(db: D1Database, input: Record<string, unknown>, c
     return [...allTerms].sort((left, right) => Number(right.bodyStatus === "indexed") - Number(left.bodyStatus === "indexed") || (left.rank ?? 0) - (right.rank ?? 0)).slice(0, limit);
   }
   const anchor = [...tokens].sort((left, right) => Number(/\d/.test(right)) - Number(/\d/.test(left)) || right.length - left.length)[0]!;
-  const anchored = await runFts(`"${anchor}"`);
-  if (/\d/.test(anchor) && anchored.length) {
-    return [...anchored].sort((left, right) => Number(right.bodyStatus === "indexed") - Number(left.bodyStatus === "indexed") || (left.rank ?? 0) - (right.rank ?? 0)).slice(0, limit);
+  if (/\d/.test(anchor)) {
+    const anchored = await runFts(`"${anchor}"`);
+    if (anchored.length) {
+      return [...anchored].sort((left, right) => Number(right.bodyStatus === "indexed") - Number(left.bodyStatus === "indexed") || (left.rank ?? 0) - (right.rank ?? 0)).slice(0, limit);
+    }
   }
   return await runFts(broadQuery);
 }
@@ -136,16 +138,14 @@ async function documentEvidence(db: D1Database, id: string, limit = 8, query = "
     WHERE d.id=? AND d.body_status='indexed' AND s.source_hash=d.current_source_hash
     ORDER BY s.ordinal LIMIT 250`).bind(id).all<SectionRow>();
   const terms = query.toLowerCase().match(/[a-z0-9][a-z0-9-]{1,31}/g)?.slice(0, 12) ?? [];
-  const ranked = result.results.map((row, ordinal) => ({
-    row,
-    ordinal,
-    score: terms.reduce((total, term) => total + (row.text.toLowerCase().includes(term) ? 1 : 0), 0)
-  })).sort((left, right) => right.score - left.score || left.ordinal - right.ordinal);
+  const ranked = result.results.map((row, ordinal) => {
+    const lower = row.text.toLowerCase();
+    return { row, lower, ordinal, score: terms.reduce((total, term) => total + (lower.includes(term) ? 1 : 0), 0) };
+  }).sort((left, right) => right.score - left.score || left.ordinal - right.ordinal);
   const selected = terms.length && ranked.some((item) => item.score > 0)
     ? ranked.filter((item) => item.score > 0).slice(0, limit)
     : ranked.slice(0, limit);
-  return selected.map(({ row }) => {
-    const lower = row.text.toLowerCase();
+  return selected.map(({ row, lower }) => {
     const firstMatch = terms.map((term) => lower.indexOf(term)).filter((index) => index >= 0).sort((left, right) => left - right)[0] ?? 0;
     const excerptStart = Math.max(0, firstMatch - 300);
     const excerptEnd = Math.min(row.text.length, excerptStart + 900);
@@ -281,8 +281,8 @@ async function handleAPI(request: Request, env: Env, requestID: string): Promise
     if (!(await authorizedAdmin(request, env.CAPTURE_IMPORT_TOKEN))) return error(requestID, "not_found", 404);
     try {
       const capture = await readBrowserCapture(request);
-      const candidate = await env.DB.prepare("SELECT id, number, official_url, title FROM documents WHERE id=?")
-        .bind(capture.documentID).first<{ id: string; number: string; official_url: string; title: string }>();
+      const candidate = await env.DB.prepare("SELECT id, number, official_url, article_id, title FROM documents WHERE id=?")
+        .bind(capture.documentID).first<{ id: string; number: string; official_url: string; article_id: string; title: string }>();
       if (!candidate) { await auditAdmin(env.DB, requestID, "import_browser_source", "failed"); return error(requestID, "not_found", 404); }
       const provenance = validateCaptureProvenance(capture, candidate);
       const result = await ingestVerifiedSource(env.DB, env.SOURCE_ARCHIVE, candidate, capture.sourceText, "interactive_browser", provenance);

@@ -94,4 +94,34 @@ describe("MARADMIN WebMCP contract", () => {
     expect(registered.map((tool) => tool.name)).toEqual([...EXPECTED_NAMES]);
     expect(await registerWebMcpTools({} as Document & { modelContext?: { registerTool(tool: WebMcpTool): Promise<unknown> | unknown } })).toEqual([]);
   });
+
+  it("supports the Navigator surface and isolates individual registration failures", async () => {
+    const registered: string[] = [];
+    const pageNavigator = {
+      modelContext: {
+        registerTool: async (tool: WebMcpTool) => {
+          if (tool.name === "get_maradmin_evidence") throw new Error("unsupported_tool");
+          registered.push(tool.name);
+        }
+      }
+    };
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      expect(await registerWebMcpTools({}, pageNavigator)).toEqual([
+        "search_maradmins",
+        "find_maradmin_revisions",
+        "evaluate_maradmin_eligibility",
+        "open_official_source"
+      ]);
+      expect(registered).toEqual([
+        "search_maradmins",
+        "find_maradmin_revisions",
+        "evaluate_maradmin_eligibility",
+        "open_official_source"
+      ]);
+      expect(warning).toHaveBeenCalledOnce();
+    } finally {
+      warning.mockRestore();
+    }
+  });
 });

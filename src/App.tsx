@@ -2,6 +2,54 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ApiEnvelope, Coverage, DocumentSummary, EligibilityContext, EligibilityResult, Evidence } from "./shared/types";
 
 type Detail = { document: DocumentSummary; evidence: Evidence[] };
+type ContextForm = {
+  rank: string;
+  mos: string;
+  component: "" | NonNullable<EligibilityContext["component"]>;
+  zone: string;
+  yearsOfService: string;
+};
+type ContextField = keyof ContextForm;
+
+const EMPTY_CONTEXT: ContextForm = { rank: "", mos: "", component: "", zone: "", yearsOfService: "" };
+const CONTEXT_LABELS: Record<ContextField, string> = {
+  rank: "Rank", mos: "MOS", component: "Component", zone: "Zone", yearsOfService: "Years of service"
+};
+
+export function validateContextForm(form: ContextForm): {
+  context: EligibilityContext;
+  errors: Partial<Record<ContextField, string>>;
+  usedFields: string[];
+} {
+  const context: EligibilityContext = {};
+  const errors: Partial<Record<ContextField, string>> = {};
+  const rank = form.rank.trim().toUpperCase();
+  const mos = form.mos.trim();
+  const zone = form.zone.trim().toUpperCase();
+  if (rank) {
+    if (/^(?:E-[1-9]|O-(?:[1-9]|10)|W-[1-5])$/.test(rank)) context.rank = rank;
+    else errors.rank = "Use E-1–E-9, W-1–W-5, or O-1–O-10.";
+  }
+  if (mos) {
+    if (/^\d{4}$/.test(mos)) context.mos = mos;
+    else errors.mos = "Enter a four-digit MOS.";
+  }
+  if (form.component) context.component = form.component;
+  if (zone) {
+    if (/^[A-E]$/.test(zone)) context.zone = zone;
+    else errors.zone = "Use zone A through E.";
+  }
+  if (form.yearsOfService.trim()) {
+    const years = Number(form.yearsOfService);
+    if (Number.isInteger(years) && years >= 0 && years <= 60) context.yearsOfService = years;
+    else errors.yearsOfService = "Enter a whole number from 0 through 60.";
+  }
+  return {
+    context,
+    errors,
+    usedFields: (Object.keys(context) as ContextField[]).map((field) => CONTEXT_LABELS[field])
+  };
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, { ...init, headers: { "content-type": "application/json", ...init?.headers } });
@@ -44,7 +92,9 @@ export function App() {
   const [coverageUnavailable, setCoverageUnavailable] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const [context, setContext] = useState<EligibilityContext>({});
+  const [contextForm, setContextForm] = useState<ContextForm>(EMPTY_CONTEXT);
+  const [contextErrors, setContextErrors] = useState<Partial<Record<ContextField, string>>>({});
+  const [usedContextFields, setUsedContextFields] = useState<string[]>([]);
   const [assessment, setAssessment] = useState<EligibilityResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,11 +151,24 @@ export function App() {
     setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 5 ? [...current, id] : current);
   }
 
+  function updateContextField<Field extends ContextField>(field: Field, value: ContextForm[Field]) {
+    setContextForm((current) => ({ ...current, [field]: value }));
+    setContextErrors((current) => ({ ...current, [field]: undefined }));
+  }
+
   async function assess() {
     if (!selected.length) { setError("Select up to five indexed messages before comparing context."); return; }
+    const validated = validateContextForm(contextForm);
+    setContextErrors(validated.errors);
+    if (Object.keys(validated.errors).length) {
+      setError("Correct the highlighted context fields before comparing messages.");
+      return;
+    }
     setError(null);
     try {
-      setAssessment(await request<EligibilityResult>("/api/eligibility", { method: "POST", body: JSON.stringify({ documentIDs: selected, context }) }));
+      const result = await request<EligibilityResult>("/api/eligibility", { method: "POST", body: JSON.stringify({ documentIDs: selected, context: validated.context }) });
+      setUsedContextFields(validated.usedFields);
+      setAssessment(result);
     } catch { setError("The evidence comparison could not be completed."); }
   }
 
@@ -161,15 +224,15 @@ export function App() {
             <p className="eyebrow">Session-only context</p>
             <p>Optional fields are used only for this comparison and are not saved.</p>
             <div className="context-grid">
-              <label>Rank<input id="eligibility-rank" name="rank" value={context.rank ?? ""} onChange={(e) => setContext({ ...context, rank: e.target.value || undefined })} placeholder="E-5" /></label>
-              <label>MOS<input id="eligibility-mos" name="mos" value={context.mos ?? ""} onChange={(e) => setContext({ ...context, mos: e.target.value || undefined })} inputMode="numeric" maxLength={4} placeholder="3044" /></label>
-              <label>Component<select id="eligibility-component" name="component" value={context.component ?? ""} onChange={(e) => setContext({ ...context, component: (e.target.value || undefined) as EligibilityContext["component"] })}><option value="">Unspecified</option><option value="active">Active</option><option value="reserve">Reserve</option><option value="smcr">SMCR</option><option value="irr">IRR</option><option value="ar">AR</option></select></label>
-              <label>Zone<input id="eligibility-zone" name="zone" value={context.zone ?? ""} onChange={(e) => setContext({ ...context, zone: e.target.value || undefined })} maxLength={1} placeholder="B" /></label>
-              <label>Years of service<input id="eligibility-years-of-service" name="yearsOfService" type="number" min="0" max="60" step="1" value={context.yearsOfService ?? ""} onChange={(e) => setContext({ ...context, yearsOfService: e.target.value === "" ? undefined : Number(e.target.value) })} placeholder="6" /></label>
+              <label>Rank<input id="eligibility-rank" name="rank" value={contextForm.rank} onChange={(e) => updateContextField("rank", e.target.value)} aria-invalid={Boolean(contextErrors.rank)} aria-describedby={contextErrors.rank ? "eligibility-rank-error" : undefined} placeholder="E-5" />{contextErrors.rank && <span className="field-error" id="eligibility-rank-error">{contextErrors.rank}</span>}</label>
+              <label>MOS<input id="eligibility-mos" name="mos" value={contextForm.mos} onChange={(e) => updateContextField("mos", e.target.value)} aria-invalid={Boolean(contextErrors.mos)} aria-describedby={contextErrors.mos ? "eligibility-mos-error" : undefined} inputMode="numeric" maxLength={4} placeholder="3044" />{contextErrors.mos && <span className="field-error" id="eligibility-mos-error">{contextErrors.mos}</span>}</label>
+              <label>Component<select id="eligibility-component" name="component" value={contextForm.component} onChange={(e) => updateContextField("component", e.target.value as ContextForm["component"])}><option value="">Unspecified</option><option value="active">Active</option><option value="reserve">Reserve</option><option value="smcr">SMCR</option><option value="irr">IRR</option><option value="ar">AR</option></select></label>
+              <label>Zone<input id="eligibility-zone" name="zone" value={contextForm.zone} onChange={(e) => updateContextField("zone", e.target.value)} aria-invalid={Boolean(contextErrors.zone)} aria-describedby={contextErrors.zone ? "eligibility-zone-error" : undefined} maxLength={1} placeholder="B" />{contextErrors.zone && <span className="field-error" id="eligibility-zone-error">{contextErrors.zone}</span>}</label>
+              <label>Years of service<input id="eligibility-years-of-service" name="yearsOfService" type="number" min="0" max="60" step="1" value={contextForm.yearsOfService} onChange={(e) => updateContextField("yearsOfService", e.target.value)} aria-invalid={Boolean(contextErrors.yearsOfService)} aria-describedby={contextErrors.yearsOfService ? "eligibility-years-error" : undefined} placeholder="6" />{contextErrors.yearsOfService && <span className="field-error" id="eligibility-years-error">{contextErrors.yearsOfService}</span>}</label>
             </div>
             <button className="assess" onClick={() => void assess()}>Compare {selected.length || "selected"} message{selected.length === 1 ? "" : "s"}</button>
           </div>
-          {assessment && <section className={`assessment assessment-${assessment.status}`}><p className="eyebrow">{assessment.status.replace("_", " ")}</p><h3>{assessment.rationale}</h3><p>{assessment.disclaimer}</p>{assessment.evidence.map((item) => <blockquote key={`${item.documentID}-${item.section}`}>{item.number} · {item.section}<br />{item.excerpt}</blockquote>)}</section>}
+          {assessment && <section className={`assessment assessment-${assessment.status}`}><p className="eyebrow">{assessment.status.replace("_", " ")}</p><h3>{assessment.rationale}</h3><p>Compared fields: {usedContextFields.length ? usedContextFields.join(", ") : "None supplied"}.</p><p>{assessment.disclaimer}</p>{assessment.evidence.map((item, index) => <blockquote key={`${item.documentID}-${item.section}-${index}`}>{item.number} · {item.section}<br />{item.excerpt}</blockquote>)}</section>}
         </aside>
       </section>
 

@@ -43,7 +43,12 @@ ON CONFLICT(id) DO UPDATE SET
   publication_year=excluded.publication_year, publication_month=excluded.publication_month,
   title=excluded.title, official_url=excluded.official_url, article_id=excluded.article_id,
   published_at=excluded.published_at, source_status=excluded.source_status,
-  catalog_revision=excluded.catalog_revision, last_verified_at=excluded.last_verified_at`;
+  catalog_revision=excluded.catalog_revision, last_verified_at=excluded.last_verified_at
+WHERE NOT EXISTS (
+  SELECT 1 FROM documents AS owner
+  WHERE owner.official_url=excluded.official_url AND owner.id<>excluded.id
+)
+ON CONFLICT(official_url) DO NOTHING`;
 
 export function validateCatalogURL(value: string): URL {
   const url = new URL(value);
@@ -130,18 +135,25 @@ export async function syncCatalog(db: D1Database, sourceURL: string, fetcher: ty
       if (!type.includes("application/json")) throw new Error("catalog_content_type");
       const page = validatePage(JSON.parse(await readBoundedText(response, MAX_CATALOG_PAGE_BYTES)));
       revision = Math.max(revision, page.catalogRevision);
-      for (let offset = 0; offset < page.items.length; offset += 40) {
-        const statements = page.items.slice(offset, offset + 40).flatMap((item) => [
+      for (let offset = 0; offset < page.items.length; offset += 25) {
+        const statements = page.items.slice(offset, offset + 25).flatMap((item) => [
           db.prepare(DOCUMENT_UPSERT_SQL)
             .bind(item.catalogID, item.number, item.sequence, item.numberYear, item.publicationYear,
               item.publicationMonth, item.title, item.officialURL, item.articleID, item.publishedAt,
               item.sourceStatus, page.catalogRevision, item.firstSeenAt, item.lastVerifiedAt),
-          db.prepare(`INSERT INTO document_fts(document_id, number, title, body)
-            SELECT ?, ?, ?, '' WHERE NOT EXISTS (SELECT 1 FROM document_fts WHERE document_id = ?)`)
+          db.prepare(`INSERT OR IGNORE INTO document_fts_rows(document_id, fts_rowid)
+            SELECT ?, COALESCE((SELECT MAX(fts_rowid) FROM document_fts_rows), 0) + 1
+            WHERE EXISTS (SELECT 1 FROM documents WHERE id = ? AND official_url = ?)
+              AND NOT EXISTS (SELECT 1 FROM document_fts_rows WHERE document_id = ?)`)
+            .bind(item.catalogID, item.catalogID, item.officialURL, item.catalogID),
+          db.prepare(`INSERT INTO document_fts(rowid, document_id, number, title, body)
+            SELECT fts_rowid, ?, ?, ?, '' FROM document_fts_rows
+            WHERE document_id = ?
+              AND NOT EXISTS (SELECT 1 FROM document_fts WHERE rowid = fts_rowid)`)
             .bind(item.catalogID, item.number, item.title, item.catalogID),
           db.prepare(`UPDATE document_fts SET number = ?, title = ?,
             body = CASE WHEN (SELECT body_status FROM documents WHERE id = ?) = 'stale' THEN '' ELSE body END
-            WHERE document_id = ?`)
+            WHERE rowid = (SELECT fts_rowid FROM document_fts_rows WHERE document_id = ?)`)
             .bind(item.number, item.title, item.catalogID, item.catalogID)
         ]);
         await db.batch(statements);

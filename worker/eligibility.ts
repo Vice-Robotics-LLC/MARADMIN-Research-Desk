@@ -43,8 +43,9 @@ export function assessSections(rows: SectionRow[], context: EligibilityContext, 
     const lower = row.text.toLowerCase();
     const matches = supplied.filter(([key, raw]) => matchesContext(key, raw, lower));
     if (!matches.length) continue;
-    if (/\b(?:not eligible|ineligible|excluded|does not qualify|not authorized)\b/.test(lower) && matches.length === supplied.length) explicitNegative = true;
-    if (/\b(?:eligible|qualif(?:y|ies|ied)|authorized|may receive|applies to)\b/.test(lower) && matches.length === supplied.length) explicitPositive = true;
+    const negative = /\b(?:not(?:\s+(?:currently|yet|otherwise|longer))?\s+eligible|no\s+longer\s+eligible|ineligible|excluded|does\s+not\s+qualify|not\s+authorized)\b/.test(lower);
+    if (negative && matches.length === supplied.length) explicitNegative = true;
+    if (!negative && /\b(?:eligible|qualif(?:y|ies|ied)|authorized|may receive|applies to)\b/.test(lower) && matches.length === supplied.length) explicitPositive = true;
     if (evidence.length >= 5) continue;
     evidence.push({
       documentID: row.id, number: row.number, title: row.title, officialURL: row.official_url,

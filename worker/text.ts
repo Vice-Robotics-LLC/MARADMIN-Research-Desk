@@ -32,22 +32,34 @@ export function htmlToPlainText(html: string): string {
     .trim();
 }
 
-export function extractMARADMINBody(html: string, expectedNumber: string): string {
+function parseMARADMINMessage(html: string, expectedNumber: string): { header: string; body: string } {
   if (!/^\d{3,4}\/\d{2}$/.test(expectedNumber)) throw new Error("invalid_expected_number");
   const plain = htmlToPlainText(html);
   const escaped = expectedNumber.replace("/", "\\/");
   const start = plain.search(/\bGENTEXT\/(?:REMARKS|REMAKS|RMKS)\//i);
   if (start < 0) throw new Error("body_marker_missing");
-  const header = plain.slice(0, start);
-  if (!new RegExp(`\\bMARADMIN\\s+${escaped}\\b`, "i").test(header)) {
-    if (/\bALMAR\s+\d{1,4}\/\d{2}\b/i.test(header)) throw new Error("not_maradmin");
+  const headerPrefix = plain.slice(0, start);
+  const identityPattern = new RegExp(`\\bMARADMIN\\s+${escaped}\\b`, "gi");
+  const identityMatches = [...headerPrefix.matchAll(identityPattern)];
+  if (!identityMatches.length) {
+    if (/\bALMAR\s+\d{1,4}\/\d{2}\b/i.test(headerPrefix)) throw new Error("not_maradmin");
     throw new Error("message_number_mismatch");
   }
+  const header = headerPrefix.slice(identityMatches.at(-1)!.index).trim();
   const bodyWithTerminator = plain.slice(start).replace(/^.*?GENTEXT\/(?:REMARKS|REMAKS|RMKS)\//i, "");
-  const trimmedTail = bodyWithTerminator.trimEnd();
-  const body = (trimmedTail.endsWith("//") ? trimmedTail.slice(0, -2) : trimmedTail).trim();
+  const terminator = /(?<!:)\/\/(?=[ \t]*(?:\n|$))/.exec(bodyWithTerminator);
+  const body = (terminator ? bodyWithTerminator.slice(0, terminator.index) : bodyWithTerminator).trim();
   if (body.length < 40) throw new Error("body_too_short");
-  return body;
+  return { header, body };
+}
+
+export function extractMARADMINBody(html: string, expectedNumber: string): string {
+  return parseMARADMINMessage(html, expectedNumber).body;
+}
+
+export function extractMARADMINRelationScope(html: string, expectedNumber: string): string {
+  const message = parseMARADMINMessage(html, expectedNumber);
+  return `${message.header}\n${message.body}`;
 }
 
 export type ParsedSection = { ordinal: number; marker: string | null; text: string };
