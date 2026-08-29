@@ -1,7 +1,11 @@
-# Release procedure
+# PM — MARADMIN Research Desk
 
-Owner: Codex coordinator
+Claims ledger reset at the 2026-08-29 agent-file consolidation. Global rules live in the single conventions file — source of truth: ops-repo `global/AGENT_CONVENTIONS.md` (`~/Desktop/Vice Robotics`); `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md` are derived working copies. This repo's durable trust, corpus, privacy, and spend boundaries live in that file's product table; the decisions file is retired — durable facts live in the table, everything else is asked in-thread. Prior ledger and decisions: `archive/`.
 
-1. Publish implementation changes through PR, required CI, review resolution, and squash merge.
-2. Redeploy the exact merged `main` revision and re-run health, search, security-header, and privacy probes.
-3. Keep Devpost registration, terms acceptance, video publication, and final submission with Christian.
+## Live claims
+
+_Active coordinators: re-claim current work here on your next turn._
+
+## Blockers
+
+_None re-recorded at consolidation. Re-raise any still-live blocker from `archive/` here or in-thread._

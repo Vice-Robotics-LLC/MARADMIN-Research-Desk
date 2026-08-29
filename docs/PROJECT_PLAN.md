@@ -9,5 +9,5 @@
 - [x] Responsive human Research Desk UI.
 - [x] Read-only WebMCP tools with bounded untrusted evidence.
 - [x] Focused security and parser fixtures.
-- [x] End-user UI, HTTPS API, responsive-layout, and supported-browser discovery acceptance. Direct page-tool invocation remains an environment permission gap recorded in `docs/DECISIONS.md`.
+- [x] End-user UI, HTTPS API, responsive-layout, and supported-browser discovery acceptance. Direct page-tool invocation remains an environment permission gap recorded in `archive/DECISIONS-2026-08-29.md`.
 - [x] Cloudflare deployment and challenge handoff material. Live GitHub PR, review, checks, and merge state remain authoritative in GitHub rather than this roadmap.
