@@ -52,7 +52,7 @@ The JSON envelope must contain the browser-observed `sourceURL`, `sourceTitle`, 
 
 The command resolves identity and the canonical URL from the deployed catalog, applies the production parser, and creates private R2/D1 import artifacts only under the ignored `.project-local/` directory. It does not upload or publish anything by itself.
 
-See [docs/PRD.md](docs/PRD.md), [docs/PROJECT_NEEDS.md](docs/PROJECT_NEEDS.md), [docs/VERIFY.md](docs/VERIFY.md), [docs/SECURITY_OPERATIONS.md](docs/SECURITY_OPERATIONS.md), and [docs/CHALLENGE_HANDOFF.md](docs/CHALLENGE_HANDOFF.md) for scope, invariants, evidence requirements, operations, and the staged challenge handoff.
+See [docs/PRD.md](docs/PRD.md), [docs/VERIFY.md](docs/VERIFY.md), [docs/SECURITY_OPERATIONS.md](docs/SECURITY_OPERATIONS.md), and [docs/CHALLENGE_HANDOFF.md](docs/CHALLENGE_HANDOFF.md) for scope, evidence requirements, operations, and the staged challenge handoff.
 
 ## WebMCP tools
 
