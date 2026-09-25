@@ -136,6 +136,7 @@ export function App() {
   const focusInvalidField = useRef<ContextField | null>(null);
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const assessmentHeading = useRef<HTMLHeadingElement>(null);
+  const assessButton = useRef<HTMLButtonElement>(null);
 
   const search = useCallback(async (searchQuery = query, searchYear = year) => {
     const requestID = ++searchRequest.current;
@@ -216,6 +217,13 @@ export function App() {
   function returnToResults() {
     const opener = openerID.current ? document.getElementById(`result-${openerID.current}`) : null;
     (opener ?? document.getElementById("maradmin-search"))?.focus();
+  }
+
+  function clearSelection() {
+    // The Clear button disappears with the selection, so focus moves to the always-present Compare button.
+    assessButton.current?.focus();
+    setSelected([]);
+    setCompareError("");
   }
 
   function toggleSelected(id: string) {
@@ -389,8 +397,9 @@ export function App() {
               <p className="compare-status" id="compare-status">
                 {selected.length} of {MAX_COMPARE} messages selected. Only full-text indexed messages can be compared{indexedShown ? "." : "; none of the results shown are indexed yet."}
               </p>
+              {selected.length > 0 && <button type="button" className="button-secondary" onClick={clearSelection}>Clear selection</button>}
               <div role="alert">{compareError && <p className="compare-error">{compareError}</p>}</div>
-              <button type="submit" className="assess" aria-describedby="compare-status" aria-disabled={compareBusy ? true : undefined}>
+              <button type="submit" ref={assessButton} className="assess" aria-describedby="compare-status" aria-disabled={compareBusy ? true : undefined}>
                 {compareBusy ? "Comparing…" : `Compare ${selected.length || "selected"} message${selected.length === 1 ? "" : "s"}`}
               </button>
             </form>

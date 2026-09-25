@@ -228,6 +228,7 @@ blockquote .section { display: block; margin-bottom: .5rem; color: var(--quote-i
 .context-field input, .context-field select { min-height: 2.75rem; }
 .context-field .field-hint { color: var(--panel-muted); }
 .field-error { display: block; margin-top: .3125rem; color: var(--panel-danger); font-size: .8125rem; font-weight: 650; line-height: 1.35; }
+.context-card form > .button-secondary { margin-top: .75rem; }
 .compare-status { margin: .875rem 0 0; color: var(--panel-muted); font-size: .875rem; line-height: 1.5; }
 .compare-error { margin: .875rem 0 0; padding: .75rem .875rem; color: var(--panel-danger); background: var(--quote-bg); border-left: 4px solid var(--panel-danger); font-weight: 650; line-height: 1.45; }
 .assess { width: 100%; min-height: 2.75rem; margin-top: .875rem; padding: .875rem; border: 0; border-radius: 3px; color: var(--cta-ink); background: var(--cta-bg); font-weight: 800; cursor: pointer; }

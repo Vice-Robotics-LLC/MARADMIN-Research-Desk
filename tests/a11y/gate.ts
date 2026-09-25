@@ -633,6 +633,9 @@ async function journeys(browser: Browser, kind: Kind, base: string): Promise<voi
     const result = await settledFocus(page);
     check(result && result.visiblePoints >= 3, label(`comparison result heading not visible ${JSON.stringify(result)}`));
     check(await page.evaluate(() => document.activeElement?.textContent) === "Supported by indexed evidence", label("comparison result heading text"));
+    await page.locator("button", { hasText: "Clear selection" }).focus();
+    await page.keyboard.press("Enter");
+    check(await page.evaluate(() => document.activeElement?.classList.contains("assess") && document.querySelectorAll(".compare input:checked").length === 0), label("Clear selection does not clear or loses focus"));
     await context.close();
 
     // Nothing selected: the error is announced by an alert and focus stays on the button.
