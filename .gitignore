@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .project-local/
+.worktrees/
 .wrangler/
 coverage/
 .env

@@ -1,0 +1,5 @@
+Contact: mailto:support@vicerobotics.com
+Expires: 2027-09-01T00:00:00.000Z
+Policy: https://maradmin-research-desk.christian-c08.workers.dev/support/#response-times
+Canonical: https://maradmin-research-desk.christian-c08.workers.dev/.well-known/security.txt
+Preferred-Languages: en

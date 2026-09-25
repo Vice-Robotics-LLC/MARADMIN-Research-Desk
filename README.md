@@ -54,6 +54,10 @@ The command resolves identity and the canonical URL from the deployed catalog, a
 
 See [docs/PRD.md](docs/PRD.md), [docs/VERIFY.md](docs/VERIFY.md), [docs/SECURITY_OPERATIONS.md](docs/SECURITY_OPERATIONS.md), and [docs/CHALLENGE_HANDOFF.md](docs/CHALLENGE_HANDOFF.md) for scope, evidence requirements, operations, and the staged challenge handoff.
 
+## Accessibility
+
+The site targets WCAG 2.2 Level AA. Every page has a Display menu (appearance, contrast, motion and backgrounds), and the accessibility statement is at [/accessibility/](https://maradmin-research-desk.christian-c08.workers.dev/accessibility/). Barrier reports go to support@vicerobotics.com with the subject "Accessibility"; a person replies within 2 business days. `pnpm verify` runs the accessibility gate described in [docs/VERIFY.md](docs/VERIFY.md).
+
 ## WebMCP tools
 
 - `search_maradmins`

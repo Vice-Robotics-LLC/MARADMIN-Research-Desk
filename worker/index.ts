@@ -1,3 +1,4 @@
+import { PREPAINT_CSP_HASH } from "../src/chrome/prepaint";
 import type { ApiEnvelope, Coverage, DocumentSummary, EligibilityContext, Evidence } from "../src/shared/types";
 import { syncCatalog } from "./catalog";
 import { validateBrowserCapturePayload, validateCaptureProvenance } from "./capture";
@@ -293,9 +294,12 @@ async function handleAPI(request: Request, env: Env, requestID: string): Promise
   return error(requestID, "not_found", 404);
 }
 
+// The only inline script is the pre-paint Display settings resolver, allowed by its exact hash.
+const CONTENT_SECURITY_POLICY = `default-src 'self'; script-src 'self' '${PREPAINT_CSP_HASH}'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests`;
+
 function secureAsset(response: Response): Response {
   const headers = new Headers(response.headers);
-  headers.set("content-security-policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; upgrade-insecure-requests");
+  headers.set("content-security-policy", CONTENT_SECURITY_POLICY);
   headers.set("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
   headers.set("referrer-policy", "no-referrer");
   headers.set("x-content-type-options", "nosniff");

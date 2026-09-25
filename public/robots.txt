@@ -1,2 +1,4 @@
 User-agent: *
 Allow: /
+
+Sitemap: https://maradmin-research-desk.christian-c08.workers.dev/sitemap.xml

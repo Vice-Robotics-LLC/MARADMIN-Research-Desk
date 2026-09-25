@@ -27,4 +27,15 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Install gate browsers (Chromium and WebKit)
+        run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm verify
+      - name: Keep the accessibility report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: accessibility-report
+          path: |
+            .project-local/a11y/report.json
+            .project-local/a11y/wrangler.log
+          if-no-files-found: ignore
