@@ -9,7 +9,7 @@ import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { chromium, webkit, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from "playwright";
+import { chromium, webkit, type Browser, type BrowserContext, type BrowserContextOptions, type Page, type Response } from "playwright";
 import { PNG } from "pngjs";
 import { DETAIL_ERROR_ID, RESULTS, installFixtures } from "./fixtures.ts";
 
@@ -75,12 +75,12 @@ async function freePort(): Promise<number> {
   });
 }
 
-type Server = { base: string; stop: () => void; recover: () => Promise<void> };
+type Server = { base: string; stop: () => Promise<void>; recover: () => Promise<void> };
 let activeServer: Server | null = null;
 let serverLog = "";
 
 async function startServer(): Promise<Server> {
-  if (process.env.A11Y_BASE_URL) return { base: process.env.A11Y_BASE_URL.replace(/\/$/, ""), stop: () => undefined, recover: async () => undefined };
+  if (process.env.A11Y_BASE_URL) return { base: process.env.A11Y_BASE_URL.replace(/\/$/, ""), stop: async () => undefined, recover: async () => undefined };
   if (!fs.existsSync(path.join(ROOT, "dist/index.html"))) throw new Error("dist/ is missing. Run `pnpm build` before `pnpm test:a11y`.");
   const port = await freePort();
   // HTTPS locally, because the CSP's upgrade-insecure-requests makes WebKit upgrade http://127.0.0.1 subresources.
@@ -89,8 +89,16 @@ async function startServer(): Promise<Server> {
   const base = `https://127.0.0.1:${port}`;
   let child: ChildProcess | null = null;
   let stateDir = "";
-  const kill = () => {
-    try { if (child?.pid) process.kill(-child.pid, "SIGTERM"); } catch { /* already stopped */ }
+  const kill = async () => {
+    const running = child;
+    if (running?.pid && running.exitCode === null && running.signalCode === null) {
+      const exited = new Promise<void>((resolve) => running.once("exit", () => resolve()));
+      try { process.kill(-running.pid, "SIGTERM"); } catch { /* already stopped */ }
+      // Wait for the old process to release the port before a replacement binds it.
+      const timer = setTimeout(() => { try { process.kill(-running.pid!, "SIGKILL"); } catch { /* gone */ } }, 10_000);
+      await exited;
+      clearTimeout(timer);
+    }
     try { if (stateDir) fs.rmSync(stateDir, { recursive: true, force: true }); } catch { /* removed by the OS later */ }
   };
   const healthy = async () => { try { return (await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) })).ok; } catch { return false; } };
@@ -109,7 +117,7 @@ async function startServer(): Promise<Server> {
       if (spawned.exitCode !== null) break;
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    kill();
+    await kill();
     throw new Error(`wrangler dev did not start:\n${serverLog.slice(-2000)}`);
   };
   await launch();
@@ -118,7 +126,7 @@ async function startServer(): Promise<Server> {
   // port, count the restart, and keep its log (.project-local/a11y/wrangler.log) for diagnosis.
   const recover = async () => {
     if (await healthy()) return;
-    recovering ??= (async () => { count("server restarts"); kill(); await launch(); })().finally(() => { recovering = null; });
+    recovering ??= (async () => { count("server restarts"); await kill(); await launch(); })().finally(() => { recovering = null; });
     await recovering;
   };
   return { base, stop: kill, recover };
@@ -144,14 +152,26 @@ async function newContext(browser: Browser, kind: Kind, setting: Setting, viewpo
   return context;
 }
 
-async function load(page: Page, base: string, route: string): Promise<number> {
-  let response;
-  try { response = await page.goto(base + route, { waitUntil: "load" }); }
-  catch (error) {
-    if (!/ERR_CONNECTION_REFUSED|Could not connect|ECONNREFUSED/.test(String(error)) || !activeServer) throw error;
-    await activeServer.recover();
-    response = await page.goto(base + route, { waitUntil: "load" });
+/**
+ * Every gate navigation goes through here. If the local dev server stopped (refused connection, or the page
+ * arrived without its stylesheet mid-crash), restart it and navigate once more; a second miss is a real failure.
+ */
+async function navigate(page: Page, url: string): Promise<Response | null> {
+  const styled = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() !== "").catch(() => false);
+  try {
+    const response = await page.goto(url, { waitUntil: "load" });
+    if (!activeServer || await styled()) return response;
+  } catch (error) {
+    if (!/ERR_CONNECTION_REFUSED|Could not connect|ECONNREFUSED|ERR_EMPTY_RESPONSE|ERR_CONNECTION_RESET/.test(String(error)) || !activeServer) throw error;
   }
+  await activeServer.recover();
+  const response = await page.goto(url, { waitUntil: "load" });
+  if (!(await styled())) throw new Error(`page loaded without its stylesheet: ${url}`);
+  return response;
+}
+
+async function load(page: Page, base: string, route: string): Promise<number> {
+  const response = await navigate(page, base + route);
   if (route === "/") {
     await page.waitForSelector(".results li");
     await page.waitForSelector(".coverage strong");
@@ -463,7 +483,7 @@ async function structure(browser: Browser, kind: Kind, base: string): Promise<vo
     await installFixtures(context);
     await context.addInitScript(() => { (window as unknown as { __csp: string[] }).__csp = []; document.addEventListener("securitypolicyviolation", (event) => (window as unknown as { __csp: string[] }).__csp.push(`${event.violatedDirective} ${event.blockedURI}`)); });
     const page = await context.newPage();
-    await page.goto(base + route.path, { waitUntil: "load" });
+    await navigate(page, base + route.path);
     await page.waitForTimeout(300);
     const result = await page.evaluate(() => ({ csp: (window as unknown as { __csp: string[] }).__csp, theme: document.documentElement.dataset.theme, js: document.documentElement.classList.contains("js") }));
     check(result.csp.length === 0, `CSP violations @ ${kind}${route.path}: ${result.csp.join("; ")}`);
@@ -498,7 +518,7 @@ async function displaySettings(browser: Browser, kind: Kind, base: string): Prom
   for (const [scheme, contrast, motion, expected] of [["dark", "no-preference", "no-preference", { bg: "rgb(7, 24, 43)" }], ["light", "no-preference", "no-preference", { bg: "rgb(247, 244, 237)" }], ["dark", "more", "no-preference", { muted: "#d3dbe6" }], ["light", "no-preference", "reduce", { dur: "0s" }]] as const) {
     const context = await browser.newContext({ viewport: DESKTOP, javaScriptEnabled: false, colorScheme: scheme, contrast, reducedMotion: motion, ignoreHTTPSErrors: localTLS });
     const page = await context.newPage();
-    await page.goto(`${base}/accessibility/`);
+    await navigate(page, `${base}/accessibility/`);
     const value = await page.evaluate(() => ({ bg: getComputedStyle(document.body).backgroundColor, muted: getComputedStyle(document.documentElement).getPropertyValue("--muted").trim(), dur: getComputedStyle(document.documentElement).getPropertyValue("--dur").trim().replace(/^0ms$/, "0s"), display: getComputedStyle(document.querySelector(".display-control")!).display }));
     for (const [key, want] of Object.entries(expected)) check(value[key as keyof typeof value] === want, label(`JS off ${scheme}/${contrast}/${motion} ${key}=${value[key as keyof typeof value]} want ${want}`));
     check(value.display === "none", label("Display button shown without JavaScript"));
@@ -512,7 +532,7 @@ async function displaySettings(browser: Browser, kind: Kind, base: string): Prom
       new MutationObserver((_, observer) => { if (document.body) { (window as unknown as { __atBody: string }).__atBody = `${document.documentElement.dataset.theme}/${document.documentElement.dataset.contrast}`; observer.disconnect(); } }).observe(document, { childList: true, subtree: true });
     });
     const page = await context.newPage();
-    await page.goto(`${base}/support/`);
+    await navigate(page, `${base}/support/`);
     const atBody = await page.evaluate(() => (window as unknown as { __atBody: string }).__atBody);
     check(atBody === "dark/more", label(`stored choice not applied before first paint (${atBody})`));
     await context.close();
@@ -527,7 +547,7 @@ async function displaySettings(browser: Browser, kind: Kind, base: string): Prom
       Object.defineProperty(window, "sessionStorage", thrower);
     });
     const page = await context.newPage();
-    await page.goto(`${base}/support/`);
+    await navigate(page, `${base}/support/`);
     await page.click("#display-toggle");
     await page.click("#panel-appearance-dark");
     await page.click("#panel-contrast-more");
@@ -552,7 +572,7 @@ async function displaySettings(browser: Browser, kind: Kind, base: string): Prom
   {
     const context = await newContext(browser, kind, SETTINGS[0]!);
     const page = await context.newPage();
-    await page.goto(`${base}/support/`);
+    await navigate(page, `${base}/support/`);
     await page.focus("#display-toggle");
     await page.keyboard.press("Enter");
     check(await page.getAttribute("#display-toggle", "aria-expanded") === "true" && await page.isVisible("#display-panel"), label("Enter does not open the panel"));
@@ -589,7 +609,7 @@ async function displaySettings(browser: Browser, kind: Kind, base: string): Prom
     const desk = await context.newPage();
     const other = await context.newPage();
     await load(desk, base, "/");
-    await other.goto(`${base}/support/`);
+    await navigate(other, `${base}/support/`);
     await typeQuery(desk, "reenlistment bonus 3044");
     await desk.fill("#eligibility-rank", "E-5"); await desk.fill("#eligibility-mos", "3044"); await desk.fill("#eligibility-zone", "B"); await desk.fill("#eligibility-years-of-service", "6");
     await desk.selectOption("#eligibility-component", "reserve");
@@ -703,7 +723,7 @@ async function tokenContrast(browser: Browser): Promise<void> {
   const pairs = (JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "token-pairs.json"), "utf8")) as { pairs: Array<{ fg: string; bg: string; under?: string; kind: "text" | "ui"; use: string }> }).pairs;
   const context = await browser.newContext({ viewport: DESKTOP, colorScheme: "light", ignoreHTTPSErrors: localTLS });
   const page = await context.newPage();
-  await page.goto(`${baseURL}/`);
+  await navigate(page, `${baseURL}/`);
   for (const theme of ["light", "dark"]) {
     for (const contrast of [false, true]) {
       const results = await page.evaluate(({ theme, contrast, pairs }) => {
@@ -738,12 +758,18 @@ async function tokenContrast(browser: Browser): Promise<void> {
 let baseURL = "";
 async function main(): Promise<void> {
   const started = Date.now();
+  process.on("exit", () => {
+    // Runs on every exit path, including a startup failure, so CI always has the dev-server log.
+    if (!serverLog) return;
+    fs.mkdirSync(REPORT_DIR, { recursive: true });
+    fs.writeFileSync(path.join(REPORT_DIR, "wrangler.log"), serverLog);
+  });
   const server = await startServer();
   activeServer = server;
   baseURL = server.base;
   try {
     try { await http(server.base); } catch (error) { fail(`HTTP checks stopped: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`); }
-    const browsers: Array<[Kind, Browser]> = [["chromium", await chromium.launch()], ["webkit", await webkit.launch()]];
+    const browsers: Array<[Kind, Browser]> = [["chromium", await chromium.launch({ args: localTLS ? ["--ignore-certificate-errors"] : [] })], ["webkit", await webkit.launch()]];
     try {
       try { await tokenContrast(browsers[0]![1]); } catch (error) { fail(`token contrast suite stopped: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`); }
       await Promise.all(browsers.map(async ([kind, browser]) => {
@@ -759,10 +785,9 @@ async function main(): Promise<void> {
       await Promise.all(browsers.map(([, browser]) => browser.close()));
     }
   } finally {
-    server.stop();
+    await server.stop();
   }
   fs.mkdirSync(REPORT_DIR, { recursive: true });
-  if (serverLog) fs.writeFileSync(path.join(REPORT_DIR, "wrangler.log"), serverLog);
   if (summary["server restarts"]) console.warn(`wrangler dev restarted ${summary["server restarts"]} time(s); see .project-local/a11y/wrangler.log:\n${serverLog.split("\n").filter((line) => /exited|error|✘/i.test(line)).slice(-8).join("\n")}`);
   const report = { base: server.base, date: new Date().toISOString(), seconds: Math.round((Date.now() - started) / 1000), summary, failures, incomplete: [...incomplete.values()].map((item) => ({ rule: item.rule, target: item.target, states: item.states.size, example: [...item.states][0] })) };
   fs.writeFileSync(path.join(REPORT_DIR, "report.json"), JSON.stringify(report, null, 2));
