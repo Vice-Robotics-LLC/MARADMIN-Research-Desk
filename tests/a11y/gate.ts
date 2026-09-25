@@ -685,7 +685,7 @@ async function wrappedHeader(browser: Browser, kind: Kind, base: string): Promis
   await load(page, base, "/");
   const label = `${kind} 700px at 150% text`;
   const header = await page.evaluate(() => ({ height: document.querySelector(".topbar")!.getBoundingClientRect().height, sticky: getComputedStyle(document.querySelector(".topbar")!).position }));
-  check(header.sticky !== "sticky" || header.height > 72, `${label}: expected a wrapped header for this check (${JSON.stringify(header)})`);
+  check(header.sticky === "sticky" && header.height > 72, `${label}: expected a wrapped header for this check (${JSON.stringify(header)})`);
   await page.evaluate(() => window.scrollTo(0, 2000));
   await page.focus(`#result-${RESULTS[4]!.id}`);
   await page.keyboard.press("Enter");

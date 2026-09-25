@@ -143,6 +143,8 @@ export function App() {
     const requestID = ++searchRequest.current;
     setLoading(true);
     const trimmed = searchQuery.trim();
+    // Only a slow search gets a "Searching…" status, so a fast one is still announced once.
+    const slow = userSearched.current ? setTimeout(() => { if (requestID === searchRequest.current) setAnnouncement("Searching…"); }, 1000) : undefined;
     try {
       const body: Record<string, unknown> = { limit: 20 };
       if (trimmed) body.query = trimmed;
@@ -161,6 +163,7 @@ export function App() {
       setSearchError(failure);
       setAnnouncement("");
     } finally {
+      clearTimeout(slow);
       if (requestID === searchRequest.current) setLoading(false);
     }
   }, [query, year]);
@@ -395,7 +398,7 @@ export function App() {
                 </div>
                 <div className="context-field">
                   <label htmlFor="eligibility-years-of-service">Years of service</label>
-                  <input id="eligibility-years-of-service" name="yearsOfService" inputMode="numeric" maxLength={2} value={contextForm.yearsOfService} autoComplete="off" onChange={(e) => updateContextField("yearsOfService", e.target.value)} aria-invalid={contextErrors.yearsOfService ? true : undefined} aria-describedby={describedBy("yearsOfService", true)} />
+                  <input id="eligibility-years-of-service" name="yearsOfService" inputMode="numeric" value={contextForm.yearsOfService} autoComplete="off" onChange={(e) => updateContextField("yearsOfService", e.target.value)} aria-invalid={contextErrors.yearsOfService ? true : undefined} aria-describedby={describedBy("yearsOfService", true)} />
                   <span className="field-hint" id="eligibility-years-of-service-hint">Whole years, 0 to 60</span>
                   {contextErrors.yearsOfService && <span className="field-error" id="eligibility-years-of-service-error">{contextErrors.yearsOfService}</span>}
                 </div>

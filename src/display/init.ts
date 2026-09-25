@@ -34,6 +34,13 @@ function revealFocusedElements(): void {
     if (!(target instanceof HTMLElement) || target === document.body) return;
     const rect = target.getBoundingClientRect();
     const covered = Number.parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop) || 0;
-    if (rect.bottom <= covered || rect.top >= window.innerHeight) target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    let hidden = rect.bottom <= covered || rect.top >= window.innerHeight;
+    // Also reveal fields clipped by a scrolling ancestor, such as the Display panel.
+    for (let node = target.parentElement; node && !hidden; node = node.parentElement) {
+      if (!/(auto|scroll|hidden)/.test(getComputedStyle(node).overflowY)) continue;
+      const box = node.getBoundingClientRect();
+      hidden = rect.bottom <= box.top || rect.top >= box.bottom;
+    }
+    if (hidden) target.scrollIntoView({ block: "nearest", inline: "nearest" });
   });
 }
