@@ -75,33 +75,53 @@ async function freePort(): Promise<number> {
   });
 }
 
-async function startServer(): Promise<{ base: string; stop: () => void }> {
-  if (process.env.A11Y_BASE_URL) return { base: process.env.A11Y_BASE_URL.replace(/\/$/, ""), stop: () => undefined };
+type Server = { base: string; stop: () => void; recover: () => Promise<void> };
+let activeServer: Server | null = null;
+let serverLog = "";
+
+async function startServer(): Promise<Server> {
+  if (process.env.A11Y_BASE_URL) return { base: process.env.A11Y_BASE_URL.replace(/\/$/, ""), stop: () => undefined, recover: async () => undefined };
   if (!fs.existsSync(path.join(ROOT, "dist/index.html"))) throw new Error("dist/ is missing. Run `pnpm build` before `pnpm test:a11y`.");
   const port = await freePort();
-  // A private, throwaway local state directory so parallel runs never share workerd storage.
-  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "research-desk-a11y-"));
-  const child: ChildProcess = spawn(path.join(ROOT, "node_modules/.bin/wrangler"), ["dev", "--port", String(port), "--ip", "127.0.0.1", "--local-protocol", "https", "--persist-to", stateDir, "--show-interactive-dev-session=false"], {
-    cwd: ROOT, detached: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, WRANGLER_SEND_METRICS: "false", NO_COLOR: "1" }
-  });
-  let log = "";
-  child.stdout?.on("data", (chunk) => { log += chunk; });
-  child.stderr?.on("data", (chunk) => { log += chunk; });
   // HTTPS locally, because the CSP's upgrade-insecure-requests makes WebKit upgrade http://127.0.0.1 subresources.
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
   localTLS = true;
   const base = `https://127.0.0.1:${port}`;
-  const stop = () => {
-    try { if (child.pid) process.kill(-child.pid, "SIGTERM"); } catch { /* already stopped */ }
-    try { fs.rmSync(stateDir, { recursive: true, force: true }); } catch { /* removed by the OS later */ }
+  let child: ChildProcess | null = null;
+  let stateDir = "";
+  const kill = () => {
+    try { if (child?.pid) process.kill(-child.pid, "SIGTERM"); } catch { /* already stopped */ }
+    try { if (stateDir) fs.rmSync(stateDir, { recursive: true, force: true }); } catch { /* removed by the OS later */ }
   };
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    try { if ((await fetch(`${base}/health`)).ok) return { base, stop }; } catch { /* not ready */ }
-    if (child.exitCode !== null) break;
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  stop();
-  throw new Error(`wrangler dev did not start:\n${log.slice(-2000)}`);
+  const healthy = async () => { try { return (await fetch(`${base}/health`, { signal: AbortSignal.timeout(5000) })).ok; } catch { return false; } };
+  const launch = async () => {
+    // A private, throwaway local state directory so parallel runs never share workerd storage.
+    stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "research-desk-a11y-"));
+    const spawned = spawn(path.join(ROOT, "node_modules/.bin/wrangler"), ["dev", "--port", String(port), "--ip", "127.0.0.1", "--local-protocol", "https", "--persist-to", stateDir, "--show-interactive-dev-session=false"], {
+      cwd: ROOT, detached: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, WRANGLER_SEND_METRICS: "false", NO_COLOR: "1" }
+    });
+    child = spawned;
+    spawned.stdout?.on("data", (chunk) => { serverLog += chunk; });
+    spawned.stderr?.on("data", (chunk) => { serverLog += chunk; });
+    spawned.on("exit", (code, signal) => { serverLog += `\n[gate] wrangler dev exited (code ${code}, signal ${signal}) at ${new Date().toISOString()}\n`; });
+    for (let attempt = 0; attempt < 120; attempt += 1) {
+      if (await healthy()) return;
+      if (spawned.exitCode !== null) break;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    kill();
+    throw new Error(`wrangler dev did not start:\n${serverLog.slice(-2000)}`);
+  };
+  await launch();
+  let recovering: Promise<void> | null = null;
+  // The local dev server is test infrastructure, not the product: if it stops, restart it on the same
+  // port, count the restart, and keep its log (.project-local/a11y/wrangler.log) for diagnosis.
+  const recover = async () => {
+    if (await healthy()) return;
+    recovering ??= (async () => { count("server restarts"); kill(); await launch(); })().finally(() => { recovering = null; });
+    await recovering;
+  };
+  return { base, stop: kill, recover };
 }
 
 // ---------- browser helpers ----------
@@ -125,7 +145,13 @@ async function newContext(browser: Browser, kind: Kind, setting: Setting, viewpo
 }
 
 async function load(page: Page, base: string, route: string): Promise<number> {
-  const response = await page.goto(base + route, { waitUntil: "load" });
+  let response;
+  try { response = await page.goto(base + route, { waitUntil: "load" }); }
+  catch (error) {
+    if (!/ERR_CONNECTION_REFUSED|Could not connect|ECONNREFUSED/.test(String(error)) || !activeServer) throw error;
+    await activeServer.recover();
+    response = await page.goto(base + route, { waitUntil: "load" });
+  }
   if (route === "/") {
     await page.waitForSelector(".results li");
     await page.waitForSelector(".coverage strong");
@@ -713,6 +739,7 @@ let baseURL = "";
 async function main(): Promise<void> {
   const started = Date.now();
   const server = await startServer();
+  activeServer = server;
   baseURL = server.base;
   try {
     try { await http(server.base); } catch (error) { fail(`HTTP checks stopped: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`); }
@@ -735,6 +762,8 @@ async function main(): Promise<void> {
     server.stop();
   }
   fs.mkdirSync(REPORT_DIR, { recursive: true });
+  if (serverLog) fs.writeFileSync(path.join(REPORT_DIR, "wrangler.log"), serverLog);
+  if (summary["server restarts"]) console.warn(`wrangler dev restarted ${summary["server restarts"]} time(s); see .project-local/a11y/wrangler.log:\n${serverLog.split("\n").filter((line) => /exited|error|✘/i.test(line)).slice(-8).join("\n")}`);
   const report = { base: server.base, date: new Date().toISOString(), seconds: Math.round((Date.now() - started) / 1000), summary, failures, incomplete: [...incomplete.values()].map((item) => ({ rule: item.rule, target: item.target, states: item.states.size, example: [...item.states][0] })) };
   fs.writeFileSync(path.join(REPORT_DIR, "report.json"), JSON.stringify(report, null, 2));
   console.log(`Accessibility gate: ${JSON.stringify(summary)} in ${report.seconds}s`);
