@@ -107,7 +107,8 @@
 :root[data-backgrounds="solid"] { --bg-image: none; --topbar-blur: none; --topbar-bg: var(--bg); }
 
 * { box-sizing: border-box; }
-html { scroll-padding-top: calc(var(--sticky-chrome-h) + 8px); }
+/* --sticky-offset is the measured header height (src/display/init.ts), so a wrapped header is still cleared. */
+html { scroll-padding-top: calc(var(--sticky-offset, var(--sticky-chrome-h)) + 8px); }
 body { margin: 0; min-width: 320px; min-height: 100vh; color: var(--ink); background: var(--bg); display: flex; flex-direction: column; }
 body > main { flex: 1 0 auto; }
 button, input, select { font: inherit; }
@@ -241,7 +242,8 @@ blockquote .section { display: block; margin-bottom: .5rem; color: var(--quote-i
 .assessment blockquote { margin-top: .75rem; }
 
 /* Static pages */
-.page { width: min(100%, 50rem); padding: 3.5rem 4vw 5rem; line-height: 1.6; }
+.page { width: min(100%, 50rem); padding: 3.5rem 4vw 5rem; line-height: 1.6; overflow-wrap: anywhere; }
+.page td, .page th { overflow-wrap: normal; }
 .page h1 { font-size: clamp(2.25rem, 6vw, 3.5rem); line-height: 1.05; letter-spacing: -.035em; }
 .page h2 { margin: 2.5rem 0 .75rem; font-size: 1.5rem; line-height: 1.25; }
 .page h3 { margin: 1.5rem 0 .5rem; font-size: 1.125rem; }
@@ -255,7 +257,7 @@ blockquote .section { display: block; margin-bottom: .5rem; color: var(--quote-i
 .note { padding: .875rem 1rem; color: var(--panel-ink); background: var(--panel-bg); border-left: 4px solid var(--accent); }
 
 /* Footer */
-.site-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem 2rem; padding: 1.875rem 4vw; color: var(--footer-ink); background: var(--footer-bg); font-size: .8125rem; line-height: 1.5; }
+.site-footer { overflow-wrap: anywhere; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem 2rem; padding: 1.875rem 4vw; color: var(--footer-ink); background: var(--footer-bg); font-size: .8125rem; line-height: 1.5; }
 .site-footer p { margin: 0 0 .4rem; }
 .site-footer a { color: var(--footer-link); font-weight: 700; text-decoration: underline; }
 .site-footer ul { display: flex; flex-wrap: wrap; gap: .25rem 1.25rem; margin: 0; padding: 0; list-style: none; }

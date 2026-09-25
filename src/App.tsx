@@ -132,6 +132,7 @@ export function App() {
   const userSearched = useRef(false);
   const openerID = useRef<string | null>(null);
   const focusDetail = useRef(false);
+  const focusAtOpen = useRef<Element | null>(null);
   const focusAssessment = useRef(false);
   const focusInvalidField = useRef<ContextField | null>(null);
   const detailHeading = useRef<HTMLHeadingElement>(null);
@@ -140,7 +141,7 @@ export function App() {
 
   const search = useCallback(async (searchQuery = query, searchYear = year) => {
     const requestID = ++searchRequest.current;
-    setLoading(true); setSearchError(null);
+    setLoading(true);
     const trimmed = searchQuery.trim();
     try {
       const body: Record<string, unknown> = { limit: 20 };
@@ -149,6 +150,7 @@ export function App() {
       const nextResults = await request<DocumentSummary[]>("/api/search", { method: "POST", body: JSON.stringify(body) });
       if (requestID !== searchRequest.current) return;
       setResults(nextResults);
+      setSearchError(null);
       // One concise status per completed search; the result list itself is not a live region.
       if (userSearched.current) setAnnouncement(resultCountMessage(nextResults.length, trimmed));
     } catch (caught) {
@@ -175,6 +177,9 @@ export function App() {
   useEffect(() => {
     if (!focusDetail.current || detailState.status === "loading" || detailState.status === "idle") return;
     focusDetail.current = false;
+    // Only move focus if it hasn't moved since Open (Safari focuses <main> on click); never steal it mid-task.
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== focusAtOpen.current && active.id !== `result-${detailState.item.id}`) return;
     focusAndReveal(detailHeading.current);
   }, [detailState]);
 
@@ -201,6 +206,7 @@ export function App() {
     const requestID = ++detailRequest.current;
     openerID.current = item.id;
     focusDetail.current = true;
+    focusAtOpen.current = document.activeElement;
     setAssessment(null);
     setDetailState({ status: "loading", item });
     const trimmed = query.trim();
@@ -301,8 +307,9 @@ export function App() {
               </span>
             </div>
           </form>
-          <div role="alert">{searchError && <p className="search-error" id="search-error">{searchError.message}</p>}</div>
-          <p className="sr-only" role="status">{announcement}</p>
+          {/* Polite, and kept until the next response, so a paused invalid query is announced once rather than re-alerted. */}
+          <div role="status">{searchError && <p className="search-error" id="search-error">{searchError.message}</p>}</div>
+          <p className="sr-only" role="status" id="search-status">{announcement}</p>
           <div className="result-heading">
             <h2 id="results-heading">{query.trim() ? "Search results" : "Latest MARADMINs"}</h2>
             <span className="result-count">{loading ? "Searching…" : `${results.length} shown`}</span>
@@ -388,7 +395,7 @@ export function App() {
                 </div>
                 <div className="context-field">
                   <label htmlFor="eligibility-years-of-service">Years of service</label>
-                  <input id="eligibility-years-of-service" name="yearsOfService" type="number" min="0" max="60" step="1" value={contextForm.yearsOfService} autoComplete="off" onChange={(e) => updateContextField("yearsOfService", e.target.value)} aria-invalid={contextErrors.yearsOfService ? true : undefined} aria-describedby={describedBy("yearsOfService", true)} />
+                  <input id="eligibility-years-of-service" name="yearsOfService" inputMode="numeric" maxLength={2} value={contextForm.yearsOfService} autoComplete="off" onChange={(e) => updateContextField("yearsOfService", e.target.value)} aria-invalid={contextErrors.yearsOfService ? true : undefined} aria-describedby={describedBy("yearsOfService", true)} />
                   <span className="field-hint" id="eligibility-years-of-service-hint">Whole years, 0 to 60</span>
                   {contextErrors.yearsOfService && <span className="field-error" id="eligibility-years-of-service-error">{contextErrors.yearsOfService}</span>}
                 </div>

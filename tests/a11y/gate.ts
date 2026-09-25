@@ -59,6 +59,7 @@ const allowlist = (JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "al
 const today = new Date().toISOString().slice(0, 10);
 for (const entry of allowlist) {
   if (!entry.rule || !entry.selector || !entry.reason || !entry.owner || !entry.reviewBy) failures.push(`allowlist entry incomplete: ${JSON.stringify(entry)}`);
+  else if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.reviewBy) || new Date(`${entry.reviewBy}T00:00:00Z`).toISOString().slice(0, 10) !== entry.reviewBy) failures.push(`allowlist reviewBy is not a real YYYY-MM-DD date: ${entry.reviewBy}`);
   else if (entry.reviewBy < today) failures.push(`allowlist entry expired ${entry.reviewBy}: ${entry.rule} ${entry.selector}`);
 }
 
@@ -588,7 +589,7 @@ async function journeys(browser: Browser, kind: Kind, base: string): Promise<voi
     await load(page, base, "/");
     // Statuses: one short announcement per completed search; the list is not a live region.
     await page.evaluate(() => {
-      const status = document.querySelector(".search-column [role=status]")!;
+      const status = document.getElementById("search-status")!;
       (window as unknown as { __status: string[] }).__status = [];
       new MutationObserver(() => { if (status.textContent) (window as unknown as { __status: string[] }).__status.push(status.textContent); }).observe(status, { subtree: true, childList: true, characterData: true });
     });
@@ -649,6 +650,29 @@ async function journeys(browser: Browser, kind: Kind, base: string): Promise<voi
   }
 }
 
+/** A header that wraps (medium width, larger text) must still be cleared when focus moves or tabs past it. */
+async function wrappedHeader(browser: Browser, kind: Kind, base: string): Promise<void> {
+  const viewport = { width: 700, height: 600 };
+  const context = await newContext(browser, kind, SETTINGS[0]!, viewport);
+  const page = await context.newPage();
+  await page.addInitScript(() => document.addEventListener("DOMContentLoaded", () => { const style = document.createElement("style"); style.textContent = "html{font-size:150% !important}"; document.head.appendChild(style); }));
+  await load(page, base, "/");
+  const label = `${kind} 700px at 150% text`;
+  const header = await page.evaluate(() => ({ height: document.querySelector(".topbar")!.getBoundingClientRect().height, sticky: getComputedStyle(document.querySelector(".topbar")!).position }));
+  check(header.sticky !== "sticky" || header.height > 72, `${label}: expected a wrapped header for this check (${JSON.stringify(header)})`);
+  await page.evaluate(() => window.scrollTo(0, 2000));
+  await page.focus(`#result-${RESULTS[4]!.id}`);
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.activeElement?.id === "evidence-heading");
+  const heading = await settledFocus(page);
+  check(heading && heading.coveredBySticky === 0 && heading.visiblePoints === 5, `${label}: evidence heading under the header ${JSON.stringify(heading)}`);
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await walk(page, kind, `${label} walk`, { measure: false });
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await walk(page, kind, `${label} reverse walk`, { measure: false, reverse: true });
+  await context.close();
+}
+
 async function tokenContrast(browser: Browser): Promise<void> {
   const pairs = (JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "token-pairs.json"), "utf8")) as { pairs: Array<{ fg: string; bg: string; under?: string; kind: "text" | "ui"; use: string }> }).pairs;
   const context = await browser.newContext({ viewport: DESKTOP, colorScheme: "light", ignoreHTTPSErrors: localTLS });
@@ -697,7 +721,7 @@ async function main(): Promise<void> {
       try { await tokenContrast(browsers[0]![1]); } catch (error) { fail(`token contrast suite stopped: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`); }
       await Promise.all(browsers.map(async ([kind, browser]) => {
         // A suite that throws is a failure, but the remaining suites still run and report.
-        for (const [name, suite] of [["structure", structure], ["display settings", displaySettings], ["journeys", journeys], ["focus not obscured", obscured], ["matrix", matrix]] as const) {
+        for (const [name, suite] of [["structure", structure], ["display settings", displaySettings], ["journeys", journeys], ["focus not obscured", obscured], ["wrapped header", wrappedHeader], ["matrix", matrix]] as const) {
           try { await suite(browser, kind, server.base); }
           catch (error) { fail(`${kind} ${name} suite stopped: ${error instanceof Error ? error.message.split("\n")[0] : String(error)}`); }
         }
