@@ -133,6 +133,7 @@ export function App() {
   const openerID = useRef<string | null>(null);
   const focusDetail = useRef(false);
   const focusAssessment = useRef(false);
+  const focusInvalidField = useRef<ContextField | null>(null);
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const assessmentHeading = useRef<HTMLHeadingElement>(null);
 
@@ -152,6 +153,8 @@ export function App() {
     } catch (caught) {
       if (requestID !== searchRequest.current) return;
       const failure = searchErrorFor(caught instanceof Error ? caught.message : "request_failed");
+      // A rejected query has no matches; keep earlier results only for transient failures.
+      if (failure.queryProblem) setResults([]);
       setSearchError(failure);
       setAnnouncement("");
     } finally {
@@ -173,6 +176,14 @@ export function App() {
     focusDetail.current = false;
     focusAndReveal(detailHeading.current);
   }, [detailState]);
+
+  useEffect(() => {
+    // Focus after React commits aria-invalid and the error text, so the field is announced with its error.
+    const field = focusInvalidField.current;
+    if (!field || !contextErrors[field]) return;
+    focusInvalidField.current = null;
+    document.getElementById(CONTEXT_FIELD_IDS[field])?.focus();
+  }, [contextErrors]);
 
   useEffect(() => {
     if (!focusAssessment.current || !assessment) return;
@@ -225,8 +236,8 @@ export function App() {
     setContextErrors(validated.errors);
     const invalid = (Object.keys(CONTEXT_FIELD_IDS) as ContextField[]).filter((field) => validated.errors[field]);
     if (invalid.length) {
-      // Focus lands on the first invalid field; its description carries the error, so it is read once.
-      document.getElementById(CONTEXT_FIELD_IDS[invalid[0]!])?.focus();
+      // Focus lands on the first invalid field (after render); its description carries the error, so it is read once.
+      focusInvalidField.current = invalid[0]!;
       return;
     }
     if (!selected.length) {

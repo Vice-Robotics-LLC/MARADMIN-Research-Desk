@@ -616,8 +616,16 @@ async function journeys(browser: Browser, kind: Kind, base: string): Promise<voi
     // Comparison: invalid fields get focus and described errors; a completed comparison moves focus to its result.
     await page.focus(`#compare-${RESULTS[0]!.id}`); await page.keyboard.press("Space");
     await page.focus(`#compare-${RESULTS[2]!.id}`); await page.keyboard.press("Space");
-    await page.focus("#eligibility-rank"); await page.keyboard.type("E5"); await page.keyboard.press("Enter");
+    await page.focus("#eligibility-rank"); await page.keyboard.type("E5");
+    await page.evaluate(() => {
+      (window as unknown as { __focusState: string[] }).__focusState = [];
+      document.addEventListener("focusin", (event) => { const target = event.target as HTMLElement; (window as unknown as { __focusState: string[] }).__focusState.push(`${target.id}:${target.getAttribute("aria-invalid")}`); });
+      document.getElementById("eligibility-rank")?.blur();
+    });
+    await page.focus(".assess"); await page.keyboard.press("Enter");
     await page.waitForTimeout(150);
+    const focusState = await page.evaluate(() => (window as unknown as { __focusState: string[] }).__focusState);
+    check(focusState.at(-1) === "eligibility-rank:true", label(`invalid field not marked invalid when focused: ${focusState.join(", ")}`));
     const invalid = await page.evaluate(() => { const field = document.activeElement as HTMLInputElement; return { id: field.id, invalid: field.getAttribute("aria-invalid"), described: (field.getAttribute("aria-describedby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent).join(" ") }; });
     check(invalid.id === "eligibility-rank" && invalid.invalid === "true" && invalid.described.includes("Use E-1"), label(`invalid field handling ${JSON.stringify(invalid)}`));
     await page.fill("#eligibility-rank", "E-5"); await page.keyboard.press("Enter");
