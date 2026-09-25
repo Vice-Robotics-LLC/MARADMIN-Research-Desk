@@ -1,0 +1,4 @@
+{
+  "$comment": "Reviewed axe exceptions. Each entry needs rule, selector, reason, owner and reviewBy (YYYY-MM-DD); optional settings/browsers narrow it. Expired entries fail the gate. Never add a blanket rule disable.",
+  "entries": []
+}

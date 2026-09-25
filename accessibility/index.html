@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="How MARADMIN Research Desk is designed and tested for accessibility, what works today, known limitations, and how to report a barrier." />
+    <meta name="color-scheme" content="light dark" />
+    <!--chrome:prepaint-->
+    <title>Accessibility · MARADMIN Research Desk</title>
+  </head>
+  <body>
+    <!--chrome:header-->
+    <main id="main" tabindex="-1" class="page">
+      <p class="eyebrow">MARADMIN Research Desk</p>
+      <h1>Accessibility</h1>
+
+      <h2 id="commitment">Our commitment</h2>
+      <p>We want everyone, including people with disabilities, to be able to use MARADMIN Research Desk independently. This page explains how we design and test for accessibility, what works today, what we’re still improving, and how to reach us.</p>
+
+      <h2 id="standards">Standards we design and test against</h2>
+      <p>We design and test this website against the Web Content Accessibility Guidelines (WCAG) 2.2 Level AA, a W3C Recommendation also published as ISO/IEC 40500:2025. The Research Desk is a website only; there is no app or browser extension.</p>
+
+      <h2 id="status">Conformance status</h2>
+      <p><strong>Partially conformant</strong> with WCAG 2.2 Level AA, as of September 24, 2026. Partially conformant means some parts of the content may not yet fully meet the standard. Our automated and keyboard checks pass on every page and state listed under “How we test”, but screen-reader testing hasn’t happened yet, and some flows could only be tested with sample records. See the known limitations below.</p>
+
+      <h2 id="features">Accessibility features</h2>
+      <ul>
+        <li>Everything works with a keyboard: search, the year filter, results, the evidence desk, comparison and the Display settings. A “Skip to main content” link comes first on every page.</li>
+        <li>A visible focus outline that contrasts at least 3:1 with its surroundings, and focus never hides under the header.</li>
+        <li>Opening a result moves focus to the evidence heading for that message. “Back to result list” returns you to the same result.</li>
+        <li>Search results are announced once as a short status, such as “20 results for ‘reenlistment bonus’”, instead of reading the whole list.</li>
+        <li>Search errors say what went wrong and how to fix the search.</li>
+        <li>The comparison form has visible labels, format hints and specific error messages. If something needs fixing, focus moves to the first field to correct. After a comparison, focus moves to the result.</li>
+        <li>Light and Dark appearance, Enhanced contrast, Reduce Motion and Solid backgrounds (see Display &amp; accessibility settings).</li>
+        <li>Windows contrast themes (forced colors) are respected.</li>
+        <li>Pages reflow to a 320 CSS pixel width and to short windows, which covers 400% zoom. Text uses relative sizes, so your browser’s text-size setting works, and WCAG text spacing doesn’t clip text.</li>
+        <li>Your search, rank, MOS, component, zone and years of service are never saved. Display settings are the only thing stored, in your browser.</li>
+      </ul>
+
+      <h2 id="display-settings">Display &amp; accessibility settings</h2>
+      <p>These settings are optional. The site is designed to meet WCAG 2.2 AA without them. The same settings are in the Display menu at the top of every page.</p>
+      <ul>
+        <li><strong>System</strong> follows your device: light or dark appearance, Increase Contrast, Reduce Motion and, where your browser shares it, Reduce Transparency.</li>
+        <li>Browsers only share some device settings with websites. For example, Safari doesn’t share Reduce Transparency. That’s why each setting also has a manual choice.</li>
+        <li>A manual choice can only add to what your device asks for. Nothing here lowers contrast or adds motion.</li>
+        <li>Your choices are saved only in this browser, for this site. Reset returns every setting to System.</li>
+      </ul>
+      <div data-display-settings-inline>
+        <noscript><p class="note">Changing these settings needs JavaScript. Without it, the site still follows your device’s appearance, contrast, motion and transparency settings.</p></noscript>
+      </div>
+
+      <h2 id="testing">How we test</h2>
+      <p>Every change to the site runs an accessibility gate that can block a release. As of September 24, 2026, it covers:</p>
+      <ul>
+        <li>Automated checks with axe-core 4.13 (WCAG 2.2 A and AA rules) on every page, including the not-found page, and on every state: search results, empty results, search errors, an opened message, a load error, comparison errors, each comparison result and the open Display menu.</li>
+        <li>Each check runs in Light and Dark (chosen manually and from the device setting), Enhanced contrast in both appearances, Reduce Motion, Solid backgrounds and, in Chromium, Windows contrast themes.</li>
+        <li>Keyboard-only walks through every focus stop, measuring that the focus indicator contrasts at least 3:1 and isn’t covered by the header, at 1280 by 800 and at 320 by 256 pixels.</li>
+        <li>Reflow at 320 CSS pixels wide, WCAG text spacing, and measured contrast for every color pair in every appearance.</li>
+        <li>The Display settings with JavaScript off, with browser storage blocked, and with the keyboard.</li>
+        <li>Comparison and eligibility states use clearly labeled synthetic sample records, because the live index doesn’t yet contain full-text messages.</li>
+      </ul>
+
+      <h2 id="environments">Tested environments</h2>
+      <ul>
+        <li>Chromium 148 (headless, through Playwright 1.60) on macOS 27, September 24, 2026.</li>
+        <li>WebKit 26.4, the engine behind Safari (headless, through Playwright 1.60) on macOS 27, September 24, 2026.</li>
+      </ul>
+      <p>We haven’t yet tested with a screen reader, with Firefox, or on a phone.</p>
+
+      <h2 id="limitations">Known limitations</h2>
+      <ul>
+        <li><strong>Screen readers not yet tested.</strong> VoiceOver on macOS and iOS and NVDA on Windows passes are scheduled after this release. Until then, we check names, roles and announcements through automated accessibility-tree checks only. Status: scheduled.</li>
+        <li><strong>Comparison is unavailable on the live site.</strong> The live index doesn’t yet contain full-text messages, so the Compare checkboxes are turned off. The comparison flow has only been tested with sample records. Workaround: open the official Marines.mil source for each message. Status: waiting on full-text indexing.</li>
+        <li><strong>Excerpts are plain text.</strong> Section numbers are kept, but tables and layout from the original message may not carry over. Workaround: the official Marines.mil link opens the original message. Status: open.</li>
+        <li><strong>Linked official pages.</strong> Marines.mil pages are run by the Marine Corps, and their accessibility is outside this page’s scope.</li>
+        <li><strong>Windows contrast themes</strong> were tested by emulation in Chromium, not on a Windows computer. Status: scheduled with the NVDA pass.</li>
+      </ul>
+
+      <h2 id="feedback">Feedback and help</h2>
+      <ul>
+        <li>Email <a href="mailto:support@vicerobotics.com?subject=Accessibility">support@vicerobotics.com</a> with the subject “Accessibility”. A person replies within 2 business days.</li>
+        <li>Tell us the page and what you were trying to do.</li>
+        <li>You don’t need to tell us about a disability.</li>
+        <li>If a barrier blocks a task, our first reply offers another way to finish it where one exists, such as the information in plain text by email. We send a fix plan or status within 10 business days, then an update at least every 10 business days.</li>
+        <li>You can ask for information in an accessible format, such as plain text, or a phone call arranged by email.</li>
+        <li>No CAPTCHA, account or form is required.</li>
+      </ul>
+      <p>See <a href="/support/">Help and contact</a> for every response time.</p>
+
+      <h2 id="reviewed">Last reviewed</h2>
+      <p>September 24, 2026. This page covers the MARADMIN Research Desk website: the Research Desk, this page, Help and contact, and the not-found page. We review it at least every three months.</p>
+    </main>
+    <!--chrome:footer-->
+    <script type="module" src="/src/static-page.ts"></script>
+  </body>
+</html>
