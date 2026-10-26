@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "maradmin-research-desk",
   "main": "worker/index.ts",
-  "compatibility_date": "2026-08-26",
+  "compatibility_date": "2026-10-19",
   "workers_dev": true,
   "observability": { "enabled": false },
   "assets": {
